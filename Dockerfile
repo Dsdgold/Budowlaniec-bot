@@ -9,6 +9,9 @@ RUN npm install --legacy-peer-deps
 COPY tsconfig.json ./
 COPY src/ ./src/
 
+# Usuń stare pliki WhatsApp (jeśli istnieją) przed buildem
+RUN rm -rf src/whatsapp src/cron
+
 RUN npm run build
 
 # === Etap produkcyjny ===
