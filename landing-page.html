@@ -1,0 +1,1556 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Budowlaniec Bot — Monitoring cen materiałów budowlanych z AI</title>
+<meta name="description" content="Bot Telegram do monitoringu cen materiałów budowlanych w Polsce. Śledź ceny w Castoramie, Leroy Merlin, 3W i Bechcickim. Oszczędzaj czas i pieniądze z AI.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-card: #1e293b;
+  --bg-card-hover: #253349;
+  --orange: #f97316;
+  --orange-light: #fb923c;
+  --blue: #3b82f6;
+  --blue-light: #60a5fa;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --border: #334155;
+  --gradient-orange: linear-gradient(135deg, #f97316, #fb923c);
+  --gradient-blue: linear-gradient(135deg, #3b82f6, #60a5fa);
+  --gradient-hero: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+a { text-decoration: none; color: inherit; }
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+/* ─── NAVBAR ─── */
+.navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  padding: 16px 0;
+  transition: all 0.3s ease;
+  background: transparent;
+}
+
+.navbar.scrolled {
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 0;
+}
+
+.navbar .container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  font-size: 1.25rem;
+}
+
+.nav-logo-icon {
+  width: 36px;
+  height: 36px;
+  background: var(--gradient-orange);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  list-style: none;
+}
+
+.nav-links a {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.nav-links a:hover { color: var(--text-primary); }
+
+.nav-cta {
+  background: var(--gradient-orange);
+  color: #fff !important;
+  padding: 10px 22px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.nav-cta:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 25px rgba(249, 115, 22, 0.35);
+}
+
+.hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.hamburger span {
+  display: block;
+  width: 24px;
+  height: 2px;
+  background: var(--text-primary);
+  border-radius: 2px;
+  transition: all 0.3s;
+}
+
+.hamburger.active span:nth-child(1) { transform: rotate(45deg) translate(5px, 5px); }
+.hamburger.active span:nth-child(2) { opacity: 0; }
+.hamburger.active span:nth-child(3) { transform: rotate(-45deg) translate(5px, -5px); }
+
+.mobile-menu {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.98);
+  backdrop-filter: blur(20px);
+  z-index: 999;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+}
+
+.mobile-menu.active { display: flex; }
+
+.mobile-menu a {
+  color: var(--text-primary);
+  font-size: 1.3rem;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .nav-links { display: none; }
+  .hamburger { display: flex; }
+}
+
+/* ─── HERO ─── */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  position: relative;
+  padding: 120px 0 80px;
+  background: var(--gradient-hero);
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -200px;
+  right: -200px;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(249,115,22,0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.hero::after {
+  content: '';
+  position: absolute;
+  bottom: -200px;
+  left: -200px;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.hero .container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: center;
+}
+
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(249,115,22,0.1);
+  border: 1px solid rgba(249,115,22,0.25);
+  padding: 8px 16px;
+  border-radius: 100px;
+  font-size: 0.85rem;
+  color: var(--orange-light);
+  font-weight: 500;
+  margin-bottom: 24px;
+}
+
+.hero h1 {
+  font-size: clamp(2.2rem, 5vw, 3.5rem);
+  font-weight: 900;
+  line-height: 1.1;
+  margin-bottom: 20px;
+  letter-spacing: -0.02em;
+}
+
+.hero h1 .gradient-text {
+  background: var(--gradient-orange);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.hero p {
+  font-size: 1.15rem;
+  color: var(--text-secondary);
+  margin-bottom: 36px;
+  max-width: 520px;
+  line-height: 1.7;
+}
+
+.hero-buttons {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--gradient-orange);
+  color: #fff;
+  padding: 16px 32px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  transition: all 0.3s;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 35px rgba(249,115,22,0.4);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  padding: 16px 32px;
+  border-radius: 14px;
+  font-weight: 600;
+  font-size: 1.05rem;
+  transition: all 0.3s;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: rgba(255,255,255,0.1);
+  border-color: var(--text-muted);
+}
+
+/* Phone Mockup */
+.phone-mockup {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.phone {
+  width: 280px;
+  background: #000;
+  border-radius: 36px;
+  padding: 12px;
+  border: 2px solid #333;
+  box-shadow: 0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+  position: relative;
+}
+
+.phone-notch {
+  width: 120px;
+  height: 28px;
+  background: #000;
+  border-radius: 0 0 18px 18px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 2;
+}
+
+.phone-screen {
+  background: linear-gradient(180deg, #1a2332 0%, #0e1621 100%);
+  border-radius: 24px;
+  padding: 0;
+  min-height: 460px;
+  overflow: hidden;
+  margin-top: -14px;
+}
+
+.chat-header {
+  background: #1a2332;
+  padding: 20px 16px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.chat-avatar {
+  width: 36px;
+  height: 36px;
+  background: var(--gradient-orange);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+
+.chat-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.chat-status {
+  font-size: 0.7rem;
+  color: #4ade80;
+}
+
+.chat-messages {
+  padding: 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.msg {
+  max-width: 85%;
+  padding: 9px 12px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.msg-bot {
+  background: #1a2332;
+  border: 1px solid rgba(255,255,255,0.06);
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+}
+
+.msg-user {
+  background: #2b5278;
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+}
+
+.msg-highlight {
+  color: var(--orange-light);
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .hero .container { grid-template-columns: 1fr; text-align: center; }
+  .hero p { margin-left: auto; margin-right: auto; }
+  .hero-buttons { justify-content: center; }
+  .phone { width: 240px; }
+  .phone-screen { min-height: 380px; }
+}
+
+/* ─── SECTION COMMON ─── */
+.section {
+  padding: 100px 0;
+  position: relative;
+}
+
+.section-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--orange);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  font-weight: 800;
+  margin-bottom: 16px;
+  letter-spacing: -0.02em;
+}
+
+.section-subtitle {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+  line-height: 1.7;
+}
+
+.section-header {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.section-header .section-subtitle { margin: 0 auto; }
+
+/* Fade-in animation */
+.fade-in {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+
+.fade-in.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ─── FEATURES ─── */
+.features { background: var(--bg-primary); }
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.feature-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 32px 28px;
+  transition: all 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+
+.feature-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-orange);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.feature-card:hover {
+  background: var(--bg-card-hover);
+  transform: translateY(-4px);
+  border-color: rgba(249,115,22,0.2);
+}
+
+.feature-card:hover::before { opacity: 1; }
+
+.feature-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  margin-bottom: 20px;
+  background: rgba(249,115,22,0.1);
+}
+
+.feature-card:nth-child(even) .feature-icon {
+  background: rgba(59,130,246,0.1);
+}
+
+.feature-card h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.feature-card p {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.feature-tag {
+  display: inline-block;
+  margin-top: 14px;
+  padding: 4px 12px;
+  background: rgba(249,115,22,0.1);
+  color: var(--orange-light);
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .features-grid { grid-template-columns: 1fr; }
+}
+@media (min-width: 769px) and (max-width: 1024px) {
+  .features-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ─── HOW IT WORKS ─── */
+.how-it-works {
+  background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+}
+
+.steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 40px;
+  position: relative;
+}
+
+.steps::before {
+  content: '';
+  position: absolute;
+  top: 48px;
+  left: 15%;
+  right: 15%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--orange), var(--blue), var(--orange));
+  opacity: 0.3;
+}
+
+.step {
+  text-align: center;
+  position: relative;
+}
+
+.step-number {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0 auto 24px;
+  position: relative;
+  z-index: 1;
+}
+
+.step:nth-child(1) .step-number { background: var(--gradient-orange); color: #fff; }
+.step:nth-child(2) .step-number { background: var(--gradient-blue); color: #fff; }
+.step:nth-child(3) .step-number { background: linear-gradient(135deg, #10b981, #34d399); color: #fff; }
+
+.step h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.step p {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  max-width: 280px;
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .steps { grid-template-columns: 1fr; gap: 48px; }
+  .steps::before { display: none; }
+}
+
+/* ─── STATS ─── */
+.stats {
+  background: var(--bg-secondary);
+  padding: 80px 0;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 32px 16px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  transition: transform 0.3s;
+}
+
+.stat-item:hover { transform: translateY(-4px); }
+
+.stat-icon {
+  font-size: 2rem;
+  margin-bottom: 12px;
+}
+
+.stat-number {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 900;
+  background: var(--gradient-orange);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1.2;
+}
+
+.stat-number .suffix {
+  font-size: 0.6em;
+  -webkit-text-fill-color: var(--orange-light);
+}
+
+.stat-label {
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+}
+
+/* ─── PRICING ─── */
+.pricing { background: var(--bg-primary); }
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.pricing-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 40px 32px;
+  position: relative;
+  transition: all 0.3s;
+}
+
+.pricing-card:hover { transform: translateY(-4px); }
+
+.pricing-card.popular {
+  border-color: var(--orange);
+  box-shadow: 0 0 40px rgba(249,115,22,0.15);
+}
+
+.pricing-badge {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gradient-orange);
+  color: #fff;
+  padding: 6px 20px;
+  border-radius: 100px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pricing-header {
+  margin-bottom: 28px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pricing-name {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.pricing-price {
+  font-size: 2.8rem;
+  font-weight: 900;
+}
+
+.pricing-price .currency { font-size: 1.2rem; vertical-align: super; }
+.pricing-price .period {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.pricing-features {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 32px;
+}
+
+.pricing-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+}
+
+.pricing-features li .check {
+  color: #4ade80;
+  font-weight: bold;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.pricing-btn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 14px;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 1rem;
+  transition: all 0.3s;
+  border: none;
+  cursor: pointer;
+}
+
+.pricing-btn-free {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.pricing-btn-free:hover { background: rgba(255,255,255,0.1); }
+
+.pricing-btn-pro {
+  background: var(--gradient-orange);
+  color: #fff;
+}
+
+.pricing-btn-pro:hover {
+  box-shadow: 0 8px 25px rgba(249,115,22,0.35);
+  transform: translateY(-1px);
+}
+
+@media (max-width: 640px) {
+  .pricing-grid { grid-template-columns: 1fr; }
+}
+
+/* ─── TESTIMONIALS ─── */
+.testimonials { background: linear-gradient(180deg, var(--bg-primary) 0%, var(--bg-secondary) 100%); }
+
+.testimonials-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+}
+
+.testimonial-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 32px 28px;
+  transition: all 0.3s;
+}
+
+.testimonial-card:hover { transform: translateY(-4px); border-color: rgba(249,115,22,0.2); }
+
+.testimonial-stars {
+  color: #fbbf24;
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+  letter-spacing: 2px;
+}
+
+.testimonial-text {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  margin-bottom: 20px;
+  font-style: italic;
+}
+
+.testimonial-author {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.testimonial-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--gradient-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.testimonial-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.testimonial-role {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 768px) {
+  .testimonials-grid { grid-template-columns: 1fr; }
+}
+
+/* ─── FAQ ─── */
+.faq { background: var(--bg-secondary); }
+
+.faq-list {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.faq-item {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  overflow: hidden;
+  transition: border-color 0.3s;
+}
+
+.faq-item.active { border-color: rgba(249,115,22,0.3); }
+
+.faq-question {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  padding: 20px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+  transition: color 0.2s;
+}
+
+.faq-question:hover { color: var(--orange-light); }
+
+.faq-arrow {
+  flex-shrink: 0;
+  transition: transform 0.3s;
+  font-size: 1.2rem;
+  color: var(--text-muted);
+}
+
+.faq-item.active .faq-arrow { transform: rotate(180deg); color: var(--orange); }
+
+.faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease, padding 0.3s ease;
+}
+
+.faq-answer-inner {
+  padding: 0 24px 20px;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+/* ─── SOCIAL CTA ─── */
+.social-cta {
+  background: var(--bg-primary);
+  text-align: center;
+  padding: 100px 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.social-cta::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(249,115,22,0.06) 0%, transparent 60%);
+  pointer-events: none;
+}
+
+.social-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin: 40px 0;
+  flex-wrap: wrap;
+}
+
+.social-link {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.3rem;
+  transition: all 0.3s;
+}
+
+.social-link:hover {
+  background: var(--gradient-orange);
+  border-color: transparent;
+  transform: translateY(-3px);
+}
+
+/* ─── FOOTER ─── */
+.footer {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  padding: 60px 0 32px;
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 40px;
+  margin-bottom: 40px;
+}
+
+.footer-brand p {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  margin-top: 12px;
+  max-width: 280px;
+  line-height: 1.6;
+}
+
+.footer-col h4 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.footer-col a {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  padding: 5px 0;
+  transition: color 0.2s;
+}
+
+.footer-col a:hover { color: var(--orange-light); }
+
+.footer-bottom {
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.footer-bottom p {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.footer-bottom-links {
+  display: flex;
+  gap: 24px;
+}
+
+.footer-bottom-links a {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  transition: color 0.2s;
+}
+
+.footer-bottom-links a:hover { color: var(--text-secondary); }
+
+@media (max-width: 768px) {
+  .footer-grid { grid-template-columns: 1fr 1fr; }
+  .footer-bottom { flex-direction: column; text-align: center; }
+}
+
+@media (max-width: 480px) {
+  .footer-grid { grid-template-columns: 1fr; }
+}
+
+/* ─── UTILITIES ─── */
+.text-center { text-align: center; }
+
+.glow-line {
+  width: 60px;
+  height: 4px;
+  background: var(--gradient-orange);
+  border-radius: 4px;
+  margin: 0 auto 24px;
+}
+</style>
+</head>
+<body>
+
+<!-- ─── NAVBAR ─── -->
+<nav class="navbar" id="navbar">
+  <div class="container">
+    <a href="#" class="nav-logo">
+      <div class="nav-logo-icon">🏗️</div>
+      Budowlaniec Bot
+    </a>
+    <ul class="nav-links">
+      <li><a href="#funkcje">Funkcje</a></li>
+      <li><a href="#jak-to-dziala">Jak to działa</a></li>
+      <li><a href="#cennik">Cennik</a></li>
+      <li><a href="#faq">FAQ</a></li>
+      <li><a href="https://t.me/Budowlaniec_bot" target="_blank" class="nav-cta">Dodaj bota →</a></li>
+    </ul>
+    <button class="hamburger" id="hamburger" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<!-- Mobile Menu -->
+<div class="mobile-menu" id="mobileMenu">
+  <a href="#funkcje" class="mobile-link">Funkcje</a>
+  <a href="#jak-to-dziala" class="mobile-link">Jak to działa</a>
+  <a href="#cennik" class="mobile-link">Cennik</a>
+  <a href="#faq" class="mobile-link">FAQ</a>
+  <a href="https://t.me/Budowlaniec_bot" target="_blank" class="btn-primary">Dodaj bota na Telegram →</a>
+</div>
+
+<!-- ─── HERO ─── -->
+<section class="hero" id="hero">
+  <div class="container">
+    <div class="hero-content">
+      <div class="hero-badge">🤖 Pierwszy taki bot w Polsce</div>
+      <h1>Monitoruj ceny materiałów budowlanych <span class="gradient-text">z AI</span></h1>
+      <p>Koniec z ręcznym porównywaniem cen w sklepach. Bot automatycznie śledzi ceny, wysyła alerty i pomaga podejmować najlepsze decyzje zakupowe. Oszczędź czas i pieniądze na każdej budowie.</p>
+      <div class="hero-buttons">
+        <a href="https://t.me/Budowlaniec_bot" target="_blank" class="btn-primary">Dodaj bota na Telegram →</a>
+        <a href="#jak-to-dziala" class="btn-secondary">Jak to działa?</a>
+      </div>
+    </div>
+    <div class="phone-mockup fade-in">
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="chat-header">
+            <div class="chat-avatar">🏗️</div>
+            <div>
+              <div class="chat-name">Budowlaniec Bot</div>
+              <div class="chat-status">● online</div>
+            </div>
+          </div>
+          <div class="chat-messages">
+            <div class="msg msg-user">Jakie są ceny cementu?</div>
+            <div class="msg msg-bot">📊 <strong>Cement CEM I 42.5R</strong><br><br>🏪 Castorama: <span class="msg-highlight">23,49 zł</span><br>🏪 Leroy Merlin: 24,99 zł<br>🏪 3W: 22,89 zł<br><br>📉 Najniższa cena: <span class="msg-highlight">3W — 22,89 zł</span><br>Trend 7d: ↓ -3,2%</div>
+            <div class="msg msg-user">/trend cement 30d</div>
+            <div class="msg msg-bot">📈 <strong>Trend cen cementu (30 dni)</strong><br><br>▓▓▓▓▓▒▒▒▓▓▓▓▓▓<br>Min: 21,50 zł | Max: 25,99 zł<br>Śr. cena: <span class="msg-highlight">23,41 zł</span><br><br>💡 Ceny spadają — dobry moment na zakup!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FEATURES ─── -->
+<section class="section features" id="funkcje">
+  <div class="container">
+    <div class="section-header fade-in">
+      <div class="section-label">⚡ Możliwości</div>
+      <h2 class="section-title">Wszystko czego potrzebujesz, w jednym bocie</h2>
+      <p class="section-subtitle">Od monitoringu cen po zaawansowane analizy AI — Budowlaniec Bot to Twój cyfrowy asystent zakupowy na budowie.</p>
+    </div>
+    <div class="features-grid">
+      <div class="feature-card fade-in">
+        <div class="feature-icon">📊</div>
+        <h3>Monitoring cen</h3>
+        <p>Automatycznie śledzi ceny w Castoramie, Leroy Merlin, 3W i Bechcickim. Aktualizacja danych dwa razy dziennie — zawsze masz aktualne informacje.</p>
+        <span class="feature-tag">4 sklepy · 2x/dzień</span>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon">📰</div>
+        <h3>Newsy branżowe</h3>
+        <p>Najświeższe wiadomości ze świata budownictwa z ponad 11 źródeł. Podsumowania AI, żebyś nie musiał czytać wszystkiego sam.</p>
+        <span class="feature-tag">11+ źródeł · Podsumowania AI</span>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon">📉</div>
+        <h3>Trendy cenowe</h3>
+        <p>Sparkline wykresy, analiza trendów 7- i 30-dniowych. Zobacz jak zmieniają się ceny i podejmij decyzję o zakupie w najlepszym momencie.</p>
+        <span class="feature-tag">Wykresy · 7/30 dni</span>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon">🔔</div>
+        <h3>Alerty cenowe</h3>
+        <p>Ustaw próg cenowy — bot powiadomi Cię natychmiast, gdy cena produktu spadnie poniżej oczekiwanego poziomu. Nigdy nie przegapisz okazji.</p>
+        <span class="feature-tag">Real-time · Powiadomienia push</span>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon">🏆</div>
+        <h3>Rankingi i porównania</h3>
+        <p>Top spadki cen, najlepsze promocje tygodnia, ranking najtańszych sklepów. Jedna komenda — pełen obraz rynku.</p>
+        <span class="feature-tag">Top spadki · Promocje · Rankingi</span>
+      </div>
+      <div class="feature-card fade-in">
+        <div class="feature-icon">🤖</div>
+        <h3>AI Asystent</h3>
+        <p>Pytaj o ceny, rynek i materiały po polsku. AI rozumie kontekst i odpowiada precyzyjnie, jakbyś rozmawiał z ekspertem budowlanym.</p>
+        <span class="feature-tag">GPT · Po polsku</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── HOW IT WORKS ─── -->
+<section class="section how-it-works" id="jak-to-dziala">
+  <div class="container">
+    <div class="section-header fade-in">
+      <div class="section-label">🚀 Start w 30 sekund</div>
+      <h2 class="section-title">Jak to działa?</h2>
+      <p class="section-subtitle">Trzy proste kroki dzielą Cię od inteligentnego monitoringu cen.</p>
+    </div>
+    <div class="steps">
+      <div class="step fade-in">
+        <div class="step-number">1</div>
+        <h3>Otwórz Telegram</h3>
+        <p>Wyszukaj <strong>@Budowlaniec_bot</strong> w aplikacji Telegram lub kliknij nasz link bezpośredni.</p>
+      </div>
+      <div class="step fade-in">
+        <div class="step-number">2</div>
+        <h3>Wpisz /start</h3>
+        <p>Uruchom bota i wybierz kategorie materiałów, które Cię interesują. Dostosuj powiadomienia do swoich potrzeb.</p>
+      </div>
+      <div class="step fade-in">
+        <div class="step-number">3</div>
+        <h3>Dostawaj raporty</h3>
+        <p>Codziennie otrzymuj aktualne ceny, trendy i newsy. Pytaj AI o cokolwiek związanego z cenami materiałów.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── STATS ─── -->
+<section class="section stats" id="statystyki">
+  <div class="container">
+    <div class="stats-grid">
+      <div class="stat-item fade-in">
+        <div class="stat-icon">🏪</div>
+        <div class="stat-number"><span class="counter" data-target="4">0</span></div>
+        <div class="stat-label">Sklepy monitorowane</div>
+      </div>
+      <div class="stat-item fade-in">
+        <div class="stat-icon">📦</div>
+        <div class="stat-number"><span class="counter" data-target="10">0</span></div>
+        <div class="stat-label">Kategorii materiałów</div>
+      </div>
+      <div class="stat-item fade-in">
+        <div class="stat-icon">📰</div>
+        <div class="stat-number"><span class="counter" data-target="11">0</span><span class="suffix">+</span></div>
+        <div class="stat-label">Źródeł newsów</div>
+      </div>
+      <div class="stat-item fade-in">
+        <div class="stat-icon">🔄</div>
+        <div class="stat-number"><span class="counter" data-target="2">0</span><span class="suffix">x/dzień</span></div>
+        <div class="stat-label">Aktualizacja danych</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── PRICING ─── -->
+<section class="section pricing" id="cennik">
+  <div class="container">
+    <div class="section-header fade-in">
+      <div class="section-label">💰 Cennik</div>
+      <h2 class="section-title">Wybierz plan dla siebie</h2>
+      <p class="section-subtitle">Zacznij za darmo i przejdź na PRO, gdy potrzebujesz więcej.</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="pricing-card fade-in">
+        <div class="pricing-header">
+          <div class="pricing-name">Free</div>
+          <div class="pricing-price">0 <span class="currency">zł</span> <span class="period">/ na zawsze</span></div>
+        </div>
+        <ul class="pricing-features">
+          <li><span class="check">✓</span> Newsy branżowe z 11+ źródeł</li>
+          <li><span class="check">✓</span> Ceny materiałów 2x dziennie</li>
+          <li><span class="check">✓</span> 5 pytań do AI dziennie</li>
+          <li><span class="check">✓</span> Komendy /trend i /ranking</li>
+          <li><span class="check">✓</span> Porównywarka cen sklepów</li>
+          <li><span class="check">✓</span> Powiadomienia o dużych zmianach</li>
+        </ul>
+        <a href="https://t.me/Budowlaniec_bot" target="_blank" class="pricing-btn pricing-btn-free">Zacznij za darmo</a>
+      </div>
+      <div class="pricing-card popular fade-in">
+        <div class="pricing-badge">Najlepszy wybór</div>
+        <div class="pricing-header">
+          <div class="pricing-name">PRO</div>
+          <div class="pricing-price"><span class="currency">zł </span>49 <span class="period">/ miesiąc</span></div>
+        </div>
+        <ul class="pricing-features">
+          <li><span class="check">✓</span> Wszystko z planu Free</li>
+          <li><span class="check">✓</span> Raporty cenowe co godzinę</li>
+          <li><span class="check">✓</span> Alerty cenowe real-time</li>
+          <li><span class="check">✓</span> 20 pytań do AI dziennie</li>
+          <li><span class="check">✓</span> Export danych do CSV</li>
+          <li><span class="check">✓</span> Priorytetowe wsparcie</li>
+        </ul>
+        <a href="https://t.me/Budowlaniec_bot" target="_blank" class="pricing-btn pricing-btn-pro">Przejdź na PRO →</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── TESTIMONIALS ─── -->
+<section class="section testimonials" id="opinie">
+  <div class="container">
+    <div class="section-header fade-in">
+      <div class="section-label">💬 Opinie</div>
+      <h2 class="section-title">Co mówią nasi użytkownicy?</h2>
+      <p class="section-subtitle">Dołącz do profesjonalistów, którzy już oszczędzają czas i pieniądze.</p>
+    </div>
+    <div class="testimonials-grid">
+      <div class="testimonial-card fade-in">
+        <div class="testimonial-stars">★★★★★</div>
+        <p class="testimonial-text">„Zanim poznałem tego bota, spędzałem godziny na porównywaniu cen w marketach. Teraz dostaję gotowe porównanie rano na Telegramie. Przy ostatniej budowie oszczędziłem ponad 2000 zł na samym cemencie!"</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">MK</div>
+          <div>
+            <div class="testimonial-name">Marek Kowalski</div>
+            <div class="testimonial-role">Kierownik budowy, Warszawa</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card fade-in">
+        <div class="testimonial-stars">★★★★★</div>
+        <p class="testimonial-text">„Alerty cenowe to game-changer. Ustawiłam próg na klej do płytek i gdy cena spadła o 15% w Leroy Merlin, dostałam powiadomienie natychmiast. Kupiliśmy 200 worków w najlepszej cenie!"</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">AN</div>
+          <div>
+            <div class="testimonial-name">Anna Nowak</div>
+            <div class="testimonial-role">Właścicielka firmy remontowej, Kraków</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card fade-in">
+        <div class="testimonial-stars">★★★★★</div>
+        <p class="testimonial-text">„Newsy branżowe i trendy cenowe pomagają mi planować zakupy z wyprzedzeniem. Widzę kiedy ceny rosną i mogę zaopatrzyć się wcześniej. Polecam każdemu, kto buduje!"</p>
+        <div class="testimonial-author">
+          <div class="testimonial-avatar">PZ</div>
+          <div>
+            <div class="testimonial-name">Piotr Zieliński</div>
+            <div class="testimonial-role">Inwestor prywatny, Gdańsk</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FAQ ─── -->
+<section class="section faq" id="faq">
+  <div class="container">
+    <div class="section-header fade-in">
+      <div class="section-label">❓ FAQ</div>
+      <h2 class="section-title">Często zadawane pytania</h2>
+      <p class="section-subtitle">Wszystko co musisz wiedzieć o Budowlaniec Bot.</p>
+    </div>
+    <div class="faq-list">
+      <div class="faq-item fade-in">
+        <button class="faq-question">
+          Jak dodać bota na Telegram?
+          <span class="faq-arrow">▼</span>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">To proste! Kliknij przycisk „Dodaj bota na Telegram" na tej stronie lub wyszukaj <strong>@Budowlaniec_bot</strong> bezpośrednio w aplikacji Telegram. Po otwarciu czatu wpisz <strong>/start</strong> i gotowe — bot przeprowadzi Cię przez konfigurację krok po kroku.</div>
+        </div>
+      </div>
+      <div class="faq-item fade-in">
+        <button class="faq-question">
+          Skąd bierzecie ceny materiałów?
+          <span class="faq-arrow">▼</span>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Monitorujemy ceny bezpośrednio ze stron internetowych największych sklepów budowlanych w Polsce: Castorama, Leroy Merlin, 3W (TrzechWspanialych.pl) oraz Bechcicki. Dane aktualizowane są dwa razy dziennie, a w planie PRO — co godzinę.</div>
+        </div>
+      </div>
+      <div class="faq-item fade-in">
+        <button class="faq-question">
+          Czy dane są aktualne?
+          <span class="faq-arrow">▼</span>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Tak! W planie darmowym ceny aktualizują się dwa razy dziennie (rano i wieczorem). W planie PRO aktualizacja odbywa się co godzinę. Przy każdym raporcie podajemy dokładny czas ostatniej aktualizacji, żebyś zawsze wiedział jak świeże są dane.</div>
+        </div>
+      </div>
+      <div class="faq-item fade-in">
+        <button class="faq-question">
+          Jak działa plan PRO?
+          <span class="faq-arrow">▼</span>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Plan PRO kosztuje 49 zł miesięcznie i daje Ci dostęp do: raportów cenowych co godzinę, alertów cenowych w czasie rzeczywistym, 20 pytań do AI dziennie (zamiast 5), eksportu danych do CSV i priorytetowego wsparcia. Aktywacja jest prosta — wpisz <strong>/pro</strong> w bocie i postępuj zgodnie z instrukcjami.</div>
+        </div>
+      </div>
+      <div class="faq-item fade-in">
+        <button class="faq-question">
+          Czy moje dane są bezpieczne?
+          <span class="faq-arrow">▼</span>
+        </button>
+        <div class="faq-answer">
+          <div class="faq-answer-inner">Bezpieczeństwo danych jest dla nas priorytetem. Nie zbieramy żadnych danych osobowych poza Twoim ID Telegram (niezbędne do wysyłania wiadomości). Nie udostępniamy danych trzecim stronom. Cała komunikacja odbywa się przez szyfrowany protokół Telegram. Twoje zapytania do AI nie są przechowywane dłużej niż 24 godziny.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── SOCIAL CTA ─── -->
+<section class="section social-cta" id="social">
+  <div class="container">
+    <div class="fade-in">
+      <div class="section-label">🌐 Śledź nas</div>
+      <h2 class="section-title">Dołącz do społeczności Budowlaniec Bot</h2>
+      <p class="section-subtitle" style="margin: 0 auto 16px;">Bądź na bieżąco z nowościami, poradami i aktualizacjami.</p>
+      <div class="social-links">
+        <a href="#" class="social-link" aria-label="Facebook">📘</a>
+        <a href="#" class="social-link" aria-label="Instagram">📸</a>
+        <a href="#" class="social-link" aria-label="LinkedIn">💼</a>
+        <a href="#" class="social-link" aria-label="YouTube">🎬</a>
+        <a href="#" class="social-link" aria-label="TikTok">🎵</a>
+      </div>
+      <a href="https://t.me/Budowlaniec_bot" target="_blank" class="btn-primary" style="margin-top: 24px;">Zacznij za darmo na Telegramie →</a>
+    </div>
+  </div>
+</section>
+
+<!-- ─── FOOTER ─── -->
+<footer class="footer">
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="nav-logo">
+          <div class="nav-logo-icon">🏗️</div>
+          Budowlaniec Bot
+        </div>
+        <p>Inteligentny bot Telegram do monitoringu cen materiałów budowlanych w Polsce. Oszczędzaj czas i pieniądze na każdej budowie.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Produkt</h4>
+        <a href="#funkcje">Funkcje</a>
+        <a href="#cennik">Cennik</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://t.me/Budowlaniec_bot" target="_blank">Dodaj bota</a>
+      </div>
+      <div class="footer-col">
+        <h4>Firma</h4>
+        <a href="#">O nas</a>
+        <a href="#">Blog</a>
+        <a href="#">Kontakt</a>
+        <a href="#">Kariera</a>
+      </div>
+      <div class="footer-col">
+        <h4>Social</h4>
+        <a href="#">Facebook</a>
+        <a href="#">Instagram</a>
+        <a href="#">LinkedIn</a>
+        <a href="#">YouTube</a>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2026 Budowlaniec Bot. Wszelkie prawa zastrzeżone.</p>
+      <div class="footer-bottom-links">
+        <a href="#">Regulamin</a>
+        <a href="#">Polityka prywatności</a>
+        <a href="#">Cookies</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script>
+// ─── NAVBAR SCROLL EFFECT ───
+const navbar = document.getElementById('navbar');
+let lastScroll = 0;
+
+window.addEventListener('scroll', () => {
+  const currentScroll = window.scrollY;
+  if (currentScroll > 50) {
+    navbar.classList.add('scrolled');
+  } else {
+    navbar.classList.remove('scrolled');
+  }
+  lastScroll = currentScroll;
+});
+
+// ─── HAMBURGER MENU ───
+const hamburger = document.getElementById('hamburger');
+const mobileMenu = document.getElementById('mobileMenu');
+
+hamburger.addEventListener('click', () => {
+  hamburger.classList.toggle('active');
+  mobileMenu.classList.toggle('active');
+  document.body.style.overflow = mobileMenu.classList.contains('active') ? 'hidden' : '';
+});
+
+document.querySelectorAll('.mobile-link').forEach(link => {
+  link.addEventListener('click', () => {
+    hamburger.classList.remove('active');
+    mobileMenu.classList.remove('active');
+    document.body.style.overflow = '';
+  });
+});
+
+// ─── INTERSECTION OBSERVER ───
+const observerOptions = {
+  root: null,
+  rootMargin: '0px 0px -80px 0px',
+  threshold: 0.1
+};
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach((entry, index) => {
+    if (entry.isIntersecting) {
+      // Stagger animation for grid children
+      const delay = entry.target.dataset.delay || 0;
+      setTimeout(() => {
+        entry.target.classList.add('visible');
+      }, delay);
+      observer.unobserve(entry.target);
+    }
+  });
+}, observerOptions);
+
+document.querySelectorAll('.fade-in').forEach((el, index) => {
+  // Add stagger delay for cards in grids
+  const parent = el.parentElement;
+  if (parent && (parent.classList.contains('features-grid') ||
+      parent.classList.contains('testimonials-grid') ||
+      parent.classList.contains('steps') ||
+      parent.classList.contains('stats-grid'))) {
+    const siblings = Array.from(parent.querySelectorAll('.fade-in'));
+    const siblingIndex = siblings.indexOf(el);
+    el.dataset.delay = siblingIndex * 100;
+  }
+  observer.observe(el);
+});
+
+// ─── ANIMATED COUNTERS ───
+const counterObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const counter = entry.target;
+      const target = parseInt(counter.dataset.target);
+      const duration = 1500;
+      const startTime = performance.now();
+
+      function updateCounter(currentTime) {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        // Ease out cubic
+        const eased = 1 - Math.pow(1 - progress, 3);
+        counter.textContent = Math.round(eased * target);
+
+        if (progress < 1) {
+          requestAnimationFrame(updateCounter);
+        } else {
+          counter.textContent = target;
+        }
+      }
+
+      requestAnimationFrame(updateCounter);
+      counterObserver.unobserve(counter);
+    }
+  });
+}, { threshold: 0.5 });
+
+document.querySelectorAll('.counter').forEach(counter => {
+  counterObserver.observe(counter);
+});
+
+// ─── FAQ ACCORDION ───
+document.querySelectorAll('.faq-question').forEach(button => {
+  button.addEventListener('click', () => {
+    const item = button.parentElement;
+    const answer = item.querySelector('.faq-answer');
+    const isActive = item.classList.contains('active');
+
+    // Close all
+    document.querySelectorAll('.faq-item').forEach(faqItem => {
+      faqItem.classList.remove('active');
+      faqItem.querySelector('.faq-answer').style.maxHeight = '0';
+    });
+
+    // Toggle clicked
+    if (!isActive) {
+      item.classList.add('active');
+      answer.style.maxHeight = answer.scrollHeight + 'px';
+    }
+  });
+});
+</script>
+</body>
+</html>

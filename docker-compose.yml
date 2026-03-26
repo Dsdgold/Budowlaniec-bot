@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: budowlaniec-bot
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - DATABASE_URL=postgresql://budowlaniec:budowlaniec123@postgres:5432/budowlaniec_db
+      - REDIS_URL=redis://redis:6379
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - AI_DAILY_LIMIT_FREE=${AI_DAILY_LIMIT_FREE:-5}
+      - AI_DAILY_LIMIT_PRO=${AI_DAILY_LIMIT_PRO:-20}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - budowlaniec-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: budowlaniec-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: budowlaniec
+      POSTGRES_PASSWORD: budowlaniec123
+      POSTGRES_DB: budowlaniec_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U budowlaniec -d budowlaniec_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - budowlaniec-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: budowlaniec-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - budowlaniec-net
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  budowlaniec-net:
+    driver: bridge
