@@ -1,12 +1,14 @@
 /**
- * EvolutionAgent — orkiestrator samoewolucji platformy
+ * EvolutionAgent — PEŁNA AUTONOMIA
+ * Orkiestrator samoewolucji platformy. Sam planuje, generuje, reviewuje,
+ * zatwierdza i aplikuje WSZYSTKIE zmiany (UI + backend).
  *
- * Cykl ewolucji:
- * 1. Zbiera feedback (błędy, metryki, analytics, user complaints)
- * 2. Generuje plan ulepszeń
- * 3. Deleguje do CodeAgent i UIAgent
- * 4. Zatwierdza i aplikuje bezpieczne zmiany
- * 5. Rollback jeśli coś poszło nie tak
+ * Cykl:
+ * 1. Zbiera feedback (błędy, metryki, analytics)
+ * 2. Deleguje do CodeAgent / UIAgent
+ * 3. AI Review — Claude ocenia czy kod jest bezpieczny
+ * 4. Auto-approve + apply
+ * 5. Health check po zmianie → rollback jeśli coś się zepsuło
  */
 import { BaseAgent, AgentResult } from '../core/agent';
 import { agentNetwork } from '../core/network';
@@ -25,25 +27,34 @@ export class EvolutionAgent extends BaseAgent {
   constructor() {
     super({
       name: 'EvolutionAgent',
-      description: 'Orkiestrator samoewolucji — planuje ulepszenia, aplikuje zatwierdzone zmiany, rollback przy błędach',
+      description: 'Pełna autonomia — planuje, reviewuje AI, zatwierdza i aplikuje WSZYSTKIE zmiany sam',
       icon: '🧠',
       cronSchedule: '30 4 * * *', // codziennie 4:30
-      tags: ['ai', 'self-evolving', 'orchestrator', 'meta'],
+      tags: ['ai', 'self-evolving', 'orchestrator', 'autonomous'],
     });
   }
 
   protected async execute(): Promise<AgentResult> {
     let applied = 0;
+    let reviewed = 0;
     let errors = 0;
     const actions: string[] = [];
 
-    // ─── FAZA 1: Zbierz feedback z systemu ───
-    const feedback = await this.gatherSystemFeedback();
-    actions.push(`Feedback: ${feedback.errorCount} błędów, ${feedback.insights} insightów`);
+    // ─── FAZA 1: AI Review wszystkich tasków w statusie 'review' ───
+    try {
+      const reviewCount = await this.aiReviewAllTasks();
+      reviewed = reviewCount;
+      actions.push(`AI Review: ${reviewCount} zadań ocenionych`);
+    } catch (error) {
+      errors++;
+      logger.error('❌ [EvolutionAgent] Błąd AI review:', error);
+    }
 
     // ─── FAZA 2: Aplikuj zatwierdzone zmiany ───
     try {
-      const approved = await this.getApprovedTasks();
+      const approved = await query(
+        `SELECT * FROM code_tasks WHERE status = 'approved' ORDER BY priority, created_at LIMIT 5`,
+      );
       for (const task of approved) {
         const success = await this.applyTask(task);
         if (success) {
@@ -55,20 +66,13 @@ export class EvolutionAgent extends BaseAgent {
       }
     } catch (error) {
       errors++;
-      logger.error('❌ [EvolutionAgent] Błąd aplikowania zmian:', error);
+      logger.error('❌ [EvolutionAgent] Błąd aplikowania:', error);
     }
 
-    // ─── FAZA 3: Auto-approve bezpieczne zmiany ───
+    // ─── FAZA 3: Generuj nowe plany na podstawie feedbacku ───
     try {
-      const autoApproved = await this.autoApproveSafeTasks();
-      actions.push(`Auto-approve: ${autoApproved} zadań`);
-    } catch (error) {
-      logger.error('❌ [EvolutionAgent] Błąd auto-approve:', error);
-    }
-
-    // ─── FAZA 4: Generuj plan na następny cykl ───
-    try {
-      if (feedback.errorCount > 3 || feedback.insights > 0) {
+      const feedback = await this.gatherSystemFeedback();
+      if (feedback.errorCount > 0 || feedback.insights > 0) {
         await this.generateEvolutionPlan(feedback);
         actions.push('Wygenerowano nowy plan ewolucji');
       }
@@ -76,143 +80,251 @@ export class EvolutionAgent extends BaseAgent {
       logger.error('❌ [EvolutionAgent] Błąd planowania:', error);
     }
 
-    // ─── FAZA 5: Czyszczenie starych tasków ───
-    await query(`DELETE FROM code_tasks WHERE status IN ('applied', 'rejected') AND updated_at < NOW() - INTERVAL '30 days'`);
+    // ─── FAZA 4: Czyszczenie ───
+    await query(
+      `DELETE FROM code_tasks WHERE status IN ('applied', 'rejected') AND updated_at < NOW() - INTERVAL '30 days'`,
+    ).catch(() => {});
 
     return {
       success: errors === 0,
-      message: `Ewolucja: ${applied} zmian zastosowanych, ${errors} błędów`,
-      data: { applied, errors, actions },
+      message: `Ewolucja: ${reviewed} reviewed, ${applied} applied, ${errors} błędów`,
+      data: { applied, reviewed, errors, actions },
     };
   }
 
-  /** Zbierz feedback z całego systemu */
-  private async gatherSystemFeedback(): Promise<{
-    errorCount: number;
-    insights: number;
-    failedAgents: string[];
-    avgResponseTime: number;
-  }> {
-    const feedback = {
-      errorCount: 0,
-      insights: 0,
-      failedAgents: [] as string[],
-      avgResponseTime: 0,
-    };
+  /**
+   * AI Review — Claude ocenia wygenerowany kod
+   * Sprawdza: bezpieczeństwo, poprawność, czy nie psuje istniejącego kodu
+   * Sam decyduje: approve / reject
+   */
+  private async aiReviewAllTasks(): Promise<number> {
+    const tasks = await query(
+      `SELECT * FROM code_tasks WHERE status = 'review' AND generated_code IS NOT NULL LIMIT 5`,
+    );
 
-    // Błędy agentów z ostatnich 24h
-    const agents = agentNetwork.getAllAgents();
-    for (const agent of agents) {
+    let reviewed = 0;
+    for (const task of tasks) {
+      try {
+        const decision = await this.aiReviewTask(task);
+        reviewed++;
+
+        if (decision.approved) {
+          await query(
+            `UPDATE code_tasks SET status = 'approved', ai_reasoning = $1, updated_at = NOW() WHERE id = $2`,
+            [`AI APPROVED: ${decision.reason}`, task.id],
+          );
+          eventBus.log('success', this.name, `AI approved: ${task.title} — ${decision.reason}`);
+        } else {
+          await query(
+            `UPDATE code_tasks SET status = 'rejected', ai_reasoning = $1, updated_at = NOW() WHERE id = $2`,
+            [`AI REJECTED: ${decision.reason}`, task.id],
+          );
+          eventBus.log('warn', this.name, `AI rejected: ${task.title} — ${decision.reason}`);
+        }
+      } catch (error) {
+        logger.error(`❌ [EvolutionAgent] Błąd review #${task.id}:`, error);
+      }
+    }
+
+    return reviewed;
+  }
+
+  /** AI ocenia pojedynczy task */
+  private async aiReviewTask(task: any): Promise<{ approved: boolean; reason: string }> {
+    const message = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 300,
+      system: `Jesteś code reviewerem platformy Spektra (TypeScript/Express/PostgreSQL).
+Oceń wygenerowany kod. ZATWIERDŹ jeśli:
+- Kod jest poprawny syntaktycznie
+- Nie zawiera SQL injection, XSS, command injection
+- Nie kasuje danych, nie dropuje tabel
+- Nie zawiera hardcoded secrets
+- Jest spójny z architekturą (BaseAgent, Express API, PostgreSQL)
+
+ODRZUĆ jeśli:
+- Błędy składniowe
+- Niebezpieczne operacje (DROP, DELETE bez WHERE, exec, eval)
+- Za duży scope (>200 linii)
+- Duplikuje istniejącą funkcjonalność
+
+Odpowiedz TYLKO w formacie JSON: {"approved": true/false, "reason": "krótkie uzasadnienie"}`,
+      messages: [{
+        role: 'user',
+        content: `Zadanie: ${task.title}
+Typ: ${task.type}
+Priorytet: ${task.priority}
+Target: ${task.target_file || 'brak'}
+
+Kod:
+\`\`\`
+${(task.generated_code || '').substring(0, 3000)}
+\`\`\``,
+      }],
+    });
+
+    const text = message.content[0].type === 'text' ? message.content[0].text.trim() : '';
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+    } catch {}
+
+    return { approved: false, reason: 'Nie udało się sparsować odpowiedzi AI review' };
+  }
+
+  /** Aplikuj zadanie — UI i backend */
+  private async applyTask(task: any): Promise<boolean> {
+    if (!task.generated_code) {
+      await query('UPDATE code_tasks SET status = $1 WHERE id = $2', ['rejected', task.id]);
+      return false;
+    }
+
+    try {
+      if (task.type === 'ui_change' && task.target_file === 'public/dashboard.html') {
+        return await this.applyUIChange(task);
+      }
+
+      // Backend changes — zapisz jako plik w /generated/ do ręcznego merge
+      // LUB jeśli to nowy agent/endpoint — aplikuj automatycznie
+      if (task.type === 'new_agent' && task.target_file) {
+        return await this.applyNewFile(task);
+      }
+
+      // Dla improvement/bugfix — zapisz wygenerowany kod do podglądu
+      return await this.saveGeneratedFile(task);
+    } catch (error) {
+      logger.error(`❌ [EvolutionAgent] Błąd: ${(error as Error).message}`);
+      return false;
+    }
+  }
+
+  /** Aplikuj zmianę UI z backupem i health check */
+  private async applyUIChange(task: any): Promise<boolean> {
+    const dashPath = path.join(__dirname, '..', '..', 'public', 'dashboard.html');
+    if (!fs.existsSync(dashPath)) return false;
+
+    // Backup
+    const backup = fs.readFileSync(dashPath, 'utf-8');
+    const backupPath = dashPath + `.backup.${task.id}`;
+    fs.writeFileSync(backupPath, backup);
+
+    // Wstaw
+    const newHtml = backup.replace(
+      '</body>',
+      `\n<!-- EVOLUTION #${task.id}: ${task.title} -->\n${task.generated_code}\n<!-- /EVOLUTION #${task.id} -->\n</body>`,
+    );
+    fs.writeFileSync(dashPath, newHtml);
+
+    // Health check — czy dashboard się wczytuje
+    try {
+      const http = await import('http');
+      const ok = await new Promise<boolean>((resolve) => {
+        const req = http.get(`http://localhost:${config.PORT}/dashboard`, (res) => {
+          resolve(res.statusCode === 200);
+        });
+        req.on('error', () => resolve(false));
+        req.setTimeout(5000, () => { req.destroy(); resolve(false); });
+      });
+
+      if (!ok) {
+        // Rollback!
+        fs.copyFileSync(backupPath, dashPath);
+        eventBus.log('error', this.name, `Rollback UI #${task.id}: health check failed`);
+        await query('UPDATE code_tasks SET status = $1, ai_reasoning = $2 WHERE id = $3',
+          ['rejected', 'ROLLBACK: health check failed after apply', task.id]);
+        return false;
+      }
+    } catch {
+      // Jeśli health check się nie udał, rollback na wszelki wypadek
+      fs.copyFileSync(backupPath, dashPath);
+      return false;
+    }
+
+    await query('UPDATE code_tasks SET status = $1, updated_at = NOW() WHERE id = $2', ['applied', task.id]);
+    eventBus.log('success', this.name, `UI applied: ${task.title}`);
+    eventBus.emitNetwork({
+      type: 'evolution:applied',
+      source: this.name,
+      timestamp: new Date(),
+      data: { taskId: task.id, title: task.title },
+    });
+
+    return true;
+  }
+
+  /** Zapisz nowy plik (np. nowy agent) */
+  private async applyNewFile(task: any): Promise<boolean> {
+    const targetPath = path.join(__dirname, '..', '..', task.target_file);
+    const dir = path.dirname(targetPath);
+
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    // Nie nadpisuj istniejących plików!
+    if (fs.existsSync(targetPath)) {
+      eventBus.log('warn', this.name, `Plik już istnieje: ${task.target_file} — pomijam`);
+      await query('UPDATE code_tasks SET status = $1, ai_reasoning = $2 WHERE id = $3',
+        ['rejected', 'Plik już istnieje', task.id]);
+      return false;
+    }
+
+    fs.writeFileSync(targetPath, task.generated_code);
+    await query('UPDATE code_tasks SET status = $1, updated_at = NOW() WHERE id = $2', ['applied', task.id]);
+    eventBus.log('success', this.name, `Nowy plik: ${task.target_file}`);
+    return true;
+  }
+
+  /** Zapisz wygenerowany kod do /generated/ */
+  private async saveGeneratedFile(task: any): Promise<boolean> {
+    const genDir = path.join(__dirname, '..', '..', 'generated');
+    if (!fs.existsSync(genDir)) fs.mkdirSync(genDir, { recursive: true });
+
+    const filename = `${task.id}_${task.type}_${Date.now()}.ts`;
+    fs.writeFileSync(path.join(genDir, filename), task.generated_code);
+    await query('UPDATE code_tasks SET status = $1, target_file = $2, updated_at = NOW() WHERE id = $3',
+      ['applied', `generated/${filename}`, task.id]);
+    eventBus.log('info', this.name, `Saved: generated/${filename}`);
+    return true;
+  }
+
+  /** Zbierz feedback z systemu */
+  private async gatherSystemFeedback(): Promise<{
+    errorCount: number; insights: number; failedAgents: string[];
+  }> {
+    const feedback = { errorCount: 0, insights: 0, failedAgents: [] as string[] };
+
+    for (const agent of agentNetwork.getAllAgents()) {
       if (agent.metrics.failedRuns > agent.metrics.successRuns * 0.3) {
         feedback.failedAgents.push(agent.name);
       }
       feedback.errorCount += agent.metrics.failedRuns;
     }
 
-    // Insights z ostatnich 24h
     try {
-      const result = await query(
+      const r = await query(
         `SELECT COUNT(*) as cnt FROM analytics_insights WHERE created_at > NOW() - INTERVAL '24 hours'`,
       );
-      feedback.insights = result[0]?.cnt || 0;
+      feedback.insights = r[0]?.cnt || 0;
     } catch {}
 
     return feedback;
   }
 
-  /** Pobierz zatwierdzone zadania gotowe do aplikacji */
-  private async getApprovedTasks(): Promise<any[]> {
-    return query(
-      `SELECT * FROM code_tasks WHERE status = 'approved' ORDER BY priority, created_at LIMIT 5`,
-    );
-  }
-
-  /** Aplikuj zatwierdzone zadanie */
-  private async applyTask(task: any): Promise<boolean> {
-    if (!task.generated_code || !task.target_file) {
-      await query('UPDATE code_tasks SET status = $1 WHERE id = $2', ['rejected', task.id]);
-      return false;
-    }
-
-    try {
-      // Tylko UI changes są bezpieczne do automatycznej aplikacji
-      if (task.type === 'ui_change' && task.target_file === 'public/dashboard.html') {
-        const dashPath = path.join(__dirname, '..', '..', 'public', 'dashboard.html');
-
-        if (!fs.existsSync(dashPath)) {
-          logger.error(`❌ [EvolutionAgent] Plik nie istnieje: ${dashPath}`);
-          return false;
-        }
-
-        // Backup
-        const backup = fs.readFileSync(dashPath, 'utf-8');
-        const backupPath = dashPath + '.backup';
-        fs.writeFileSync(backupPath, backup);
-
-        // Wstaw widget przed </body>
-        const code = task.generated_code;
-        const newHtml = backup.replace('</body>', `\n<!-- AUTO-GENERATED by UIAgent #${task.id} -->\n${code}\n<!-- END AUTO-GENERATED -->\n</body>`);
-        fs.writeFileSync(dashPath, newHtml);
-
-        await query('UPDATE code_tasks SET status = $1, updated_at = NOW() WHERE id = $2', ['applied', task.id]);
-
-        eventBus.log('success', this.name, `Zastosowano zmianę UI: ${task.title}`);
-        eventBus.emitNetwork({
-          type: 'evolution:applied',
-          source: this.name,
-          timestamp: new Date(),
-          data: { taskId: task.id, title: task.title, type: task.type },
-        });
-
-        return true;
-      }
-
-      // Backend changes — loguj do review, nie aplikuj automatycznie
-      eventBus.log('info', this.name, `Backend change "${task.title}" wymaga ręcznej aplikacji`);
-      return false;
-    } catch (error) {
-      logger.error(`❌ [EvolutionAgent] Błąd aplikowania: ${(error as Error).message}`);
-
-      // Rollback UI change
-      try {
-        const dashPath = path.join(__dirname, '..', '..', 'public', 'dashboard.html');
-        const backupPath = dashPath + '.backup';
-        if (fs.existsSync(backupPath)) {
-          fs.copyFileSync(backupPath, dashPath);
-          eventBus.log('warn', this.name, `Rollback UI change: ${task.title}`);
-        }
-      } catch {}
-
-      return false;
-    }
-  }
-
-  /** Auto-approve bezpieczne zadania (tylko UI, niski priorytet) */
-  private async autoApproveSafeTasks(): Promise<number> {
-    const result = await query(
-      `UPDATE code_tasks SET status = 'approved', updated_at = NOW()
-       WHERE status = 'review'
-       AND type = 'ui_change'
-       AND priority IN ('low', 'medium')
-       AND generated_code IS NOT NULL
-       AND LENGTH(generated_code) < 5000
-       RETURNING id`,
-    );
-    return result.length;
-  }
-
-  /** Generuj plan ewolucji na podstawie feedbacku */
+  /** Generuj plan ewolucji */
   private async generateEvolutionPlan(feedback: any): Promise<void> {
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 500,
-      system: `Jesteś architektem platformy Spektra Agent Network. Zaplanuj 1-3 ulepszenia.
-Format: JSON array: [{"type":"feature|improvement|bugfix","title":"...","description":"...","priority":"low|medium|high"}]
+      system: `Jesteś architektem Spektra Agent Network. Zaplanuj 1-3 ulepszenia.
+Format: JSON array: [{"type":"feature|improvement|bugfix|ui_change|new_agent","title":"...","description":"...","priority":"low|medium|high"}]
 Tylko JSON.`,
       messages: [{
         role: 'user',
-        content: `Feedback systemu:
-- Błędy agentów: ${feedback.errorCount}
+        content: `Feedback:
+- Błędy: ${feedback.errorCount}
 - Problematyczni agenci: ${feedback.failedAgents.join(', ') || 'brak'}
 - Nowe insights: ${feedback.insights}
 Zaplanuj ulepszenia.`,
@@ -228,10 +340,9 @@ Zaplanuj ulepszenia.`,
       for (const t of tasks.slice(0, 3)) {
         await query(
           `INSERT INTO code_tasks (type, title, description, priority, source, status)
-           VALUES ($1, $2, $3, $4, 'EvolutionAgent', 'pending')
-           ON CONFLICT DO NOTHING`,
+           VALUES ($1, $2, $3, $4, 'EvolutionAgent', 'pending')`,
           [t.type, t.title, t.description, t.priority],
-        );
+        ).catch(() => {}); // duplikaty ignoruj
       }
     } catch {}
   }

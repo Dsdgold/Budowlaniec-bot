@@ -452,6 +452,21 @@
 
     <!-- RIGHT SIDEBAR -->
     <div class="sidebar">
+      <!-- EVOLUTION HISTORY -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🧠 Ewolucja</div>
+          <button class="agent-btn" onclick="loadEvolution()">Odswiez</button>
+        </div>
+        <div class="card-body" style="padding:0.6rem">
+          <div class="evo-stats" id="evoStats" style="display:flex;gap:0.8rem;margin-bottom:0.8rem;font-size:0.7rem">
+          </div>
+          <div class="evo-list" id="evoList" style="max-height:300px;overflow-y:auto">
+            <div style="color:var(--text-muted);font-size:0.75rem">Ladowanie...</div>
+          </div>
+        </div>
+      </div>
+
       <!-- LIVE LOG -->
       <div class="card" style="flex:1">
         <div class="card-header">
@@ -754,6 +769,73 @@ function timeAgo(date) {
   return `${Math.floor(s/86400)}d temu`;
 }
 
+// ─── EVOLUTION ───
+async function loadEvolution() {
+  try {
+    // Stats
+    const statsRes = await fetch('/api/evolution/stats');
+    const stats = await statsRes.json();
+    const el = document.getElementById('evoStats');
+    if (el && stats) {
+      el.innerHTML = `
+        <div style="text-align:center;flex:1"><div style="font-size:1.2rem;font-weight:700;color:var(--accent-cyan)">${stats.total||0}</div><div style="color:var(--text-muted)">Razem</div></div>
+        <div style="text-align:center;flex:1"><div style="font-size:1.2rem;font-weight:700;color:var(--accent-yellow)">${stats.pending||0}</div><div style="color:var(--text-muted)">Pending</div></div>
+        <div style="text-align:center;flex:1"><div style="font-size:1.2rem;font-weight:700;color:var(--accent-purple)">${stats.review||0}</div><div style="color:var(--text-muted)">Review</div></div>
+        <div style="text-align:center;flex:1"><div style="font-size:1.2rem;font-weight:700;color:var(--accent-green)">${stats.applied||0}</div><div style="color:var(--text-muted)">Applied</div></div>`;
+    }
+
+    // Tasks list
+    const tasksRes = await fetch('/api/evolution/tasks');
+    const tasks = await tasksRes.json();
+    const list = document.getElementById('evoList');
+    if (!list) return;
+
+    if (!tasks || tasks.length === 0) {
+      list.innerHTML = '<div style="color:var(--text-muted);font-size:0.75rem;padding:0.5rem">Brak zadan. Agenci wygeneruja je automatycznie.</div>';
+      return;
+    }
+
+    list.innerHTML = tasks.slice(0, 20).map(t => {
+      const statusColors = {
+        pending: 'var(--accent-yellow)', review: 'var(--accent-purple)',
+        approved: 'var(--accent-blue)', applied: 'var(--accent-green)',
+        rejected: 'var(--accent-red)', in_progress: 'var(--accent-cyan)'
+      };
+      const color = statusColors[t.status] || 'var(--text-muted)';
+      const icons = { feature:'✨', bugfix:'🐛', improvement:'⬆️', ui_change:'🎨', new_agent:'🤖' };
+      const icon = icons[t.type] || '📋';
+      const date = new Date(t.updated_at || t.created_at).toLocaleString('pl-PL', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+      const source = t.source || '';
+
+      return `<div style="padding:0.5rem 0;border-bottom:1px solid var(--border);font-size:0.72rem">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span>${icon} <b>${t.title}</b></span>
+          <span style="color:${color};font-size:0.6rem;text-transform:uppercase;font-weight:700">${t.status}</span>
+        </div>
+        <div style="color:var(--text-muted);margin-top:0.2rem;font-size:0.65rem">
+          ${date} · ${source} · ${t.priority}
+          ${t.ai_reasoning ? '<br><i>' + t.ai_reasoning.substring(0,80) + '</i>' : ''}
+        </div>
+        ${t.status === 'review' ? `<div style="margin-top:0.3rem"><button class="agent-btn" onclick="approveTask(${t.id})" style="font-size:0.6rem;padding:0.2rem 0.5rem">✅ Approve</button> <button class="agent-btn toggle-off" onclick="rejectTask(${t.id})" style="font-size:0.6rem;padding:0.2rem 0.5rem">❌ Reject</button></div>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    console.error('Evolution load error:', e);
+  }
+}
+
+async function approveTask(id) {
+  await fetch(`/api/evolution/tasks/${id}/approve`, { method: 'POST' });
+  addLog('success', 'Evolution', `Zadanie #${id} zatwierdzone`);
+  loadEvolution();
+}
+
+async function rejectTask(id) {
+  await fetch(`/api/evolution/tasks/${id}/reject`, { method: 'POST' });
+  addLog('info', 'Evolution', `Zadanie #${id} odrzucone`);
+  loadEvolution();
+}
+
 // ─── INIT ───
 document.addEventListener('DOMContentLoaded', () => {
   connectWS();
@@ -762,12 +844,14 @@ document.addEventListener('DOMContentLoaded', () => {
   loadStats();
   loadAgents();
   loadChart();
+  loadEvolution();
 
   // Auto-refresh co 30s
   setInterval(() => {
     loadStats();
     loadAgents();
     loadChart();
+    loadEvolution();
   }, 30000);
 });
 </script>
