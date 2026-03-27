@@ -107,12 +107,18 @@ class AgentNetwork {
     return agent.run();
   }
 
-  /** Uruchom wszystkich agentów */
+  /** Uruchom wszystkich agentów (fault-tolerant — jeden crash nie blokuje reszty) */
   async runAll(): Promise<Record<string, AgentResult>> {
     const results: Record<string, AgentResult> = {};
     for (const [name, agent] of this.agents) {
       if (agent.enabled) {
-        results[name] = await agent.run();
+        try {
+          results[name] = await agent.run();
+        } catch (error) {
+          results[name] = { success: false, message: `Crash: ${(error as Error).message}` };
+          logger.error(`❌ [Network] Agent ${name} crash — pomijam, kontynuuję:`, error);
+          eventBus.log('error', 'Network', `Agent ${name} crash — pominięty: ${(error as Error).message}`);
+        }
       }
     }
     return results;
@@ -128,7 +134,10 @@ class AgentNetwork {
     }
 
     const job = cron.schedule(agent.cronSchedule, () => {
-      agent.run();
+      agent.run().catch((error) => {
+        logger.error(`❌ [CRON] ${agent.name} crash — pominięty:`, error);
+        eventBus.log('error', 'CRON', `${agent.name} crash: ${(error as Error).message}`);
+      });
     });
 
     this.cronJobs.set(agent.name, job);

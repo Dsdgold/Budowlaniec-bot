@@ -143,7 +143,14 @@ export abstract class BaseAgent extends EventEmitter {
     logger.info(`${this.icon} [${this.name}] Start...`);
 
     try {
-      const result = await this.execute();
+      // Timeout 5 minut — nie pozwól agentowi wisieć w nieskończoność
+      const timeoutMs = 5 * 60 * 1000;
+      const result = await Promise.race([
+        this.execute(),
+        new Promise<AgentResult>((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout po ${timeoutMs / 1000}s`)), timeoutMs),
+        ),
+      ]);
       const duration = Date.now() - startTime;
       result.duration = duration;
 

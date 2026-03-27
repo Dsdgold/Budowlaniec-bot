@@ -1,8 +1,13 @@
 /**
- * Koordynator agentów v3 — rejestruje agentów w sieci
- * Nowa architektura: BaseAgent + AgentNetwork
+ * Koordynator agentów v3 — fault-tolerant rejestracja
+ * Jeśli jeden agent się wysypie, reszta działa dalej
  */
 import { agentNetwork } from '../core/network';
+import { BaseAgent, AgentResult } from '../core/agent';
+import { eventBus } from '../core/events';
+import logger from '../utils/logger';
+
+// Importy agentów
 import { PriceAgent } from './price-agent';
 import { NewsAgent } from './news-agent';
 import { MorningReportAgent, EveningReportAgent } from './report-agent';
@@ -13,44 +18,60 @@ import { AnalyticsAgent } from './analytics-agent';
 import { CodeAgent } from './code-agent';
 import { UIAgent } from './ui-agent';
 import { EvolutionAgent } from './evolution-agent';
-import { AgentResult } from '../core/agent';
-import logger from '../utils/logger';
+import { DoctorAgent } from './doctor-agent';
+
+/**
+ * Bezpieczna rejestracja — jeśli agent się wysypie, reszta działa
+ */
+function safeRegister(factory: () => BaseAgent): void {
+  try {
+    const agent = factory();
+    agentNetwork.register(agent);
+  } catch (error) {
+    const name = factory.name || 'unknown';
+    logger.error(`❌ [Coordinator] Nie udało się zarejestrować agenta: ${(error as Error).message}`);
+    eventBus.log('error', 'Coordinator', `Agent pominięty: ${(error as Error).message}`);
+  }
+}
 
 /**
  * Zarejestruj wszystkich agentów i uruchom sieć
  */
 export function start(): void {
-  logger.info('⚡ [Coordinator] Rejestruję agentów w sieci...');
+  logger.info('⚡ [Coordinator] Rejestruję agentów w sieci (fault-tolerant)...');
 
   // Core agents
-  agentNetwork.register(new PriceAgent());
-  agentNetwork.register(new NewsAgent());
-  agentNetwork.register(new MorningReportAgent());
-  agentNetwork.register(new EveningReportAgent());
-  agentNetwork.register(new AIMaintenanceAgent());
+  safeRegister(() => new PriceAgent());
+  safeRegister(() => new NewsAgent());
+  safeRegister(() => new MorningReportAgent());
+  safeRegister(() => new EveningReportAgent());
+  safeRegister(() => new AIMaintenanceAgent());
 
   // Data agents
-  agentNetwork.register(new LeadsAgent());
-  agentNetwork.register(new MonitorAgent());
-  agentNetwork.register(new AnalyticsAgent());
+  safeRegister(() => new LeadsAgent());
+  safeRegister(() => new MonitorAgent());
+  safeRegister(() => new AnalyticsAgent());
 
   // Self-evolving agents
-  agentNetwork.register(new CodeAgent());
-  agentNetwork.register(new UIAgent());
-  agentNetwork.register(new EvolutionAgent());
+  safeRegister(() => new CodeAgent());
+  safeRegister(() => new UIAgent());
+  safeRegister(() => new EvolutionAgent());
+
+  // Doctor — naprawia innych agentów (rejestruj OSTATNIEGO)
+  safeRegister(() => new DoctorAgent());
 
   // Uruchom CRON schedules
   agentNetwork.start();
 
-  logger.info('✅ [Coordinator] Sieć agentów uruchomiona');
+  const count = agentNetwork.getAllAgents().length;
+  logger.info(`✅ [Coordinator] Sieć uruchomiona: ${count} agentów`);
+  eventBus.log('success', 'Coordinator', `Zarejestrowano ${count} agentów`);
 }
 
 /**
- * Uruchom agenta ręcznie (kompatybilność wsteczna)
+ * Uruchom agenta ręcznie
  */
-export async function runManual(
-  agentName: 'price' | 'news' | 'morning_report' | 'evening_report' | 'maintenance' | 'leads' | 'monitor' | 'analytics',
-): Promise<AgentResult> {
+export async function runManual(agentName: string): Promise<AgentResult> {
   const nameMap: Record<string, string> = {
     price: 'PriceAgent',
     news: 'NewsAgent',
@@ -63,18 +84,15 @@ export async function runManual(
     code: 'CodeAgent',
     ui: 'UIAgent',
     evolution: 'EvolutionAgent',
+    doctor: 'DoctorAgent',
   };
 
-  const networkName = nameMap[agentName];
-  if (!networkName) {
-    return { success: false, message: `Nieznany agent: ${agentName}` };
-  }
-
+  const networkName = nameMap[agentName] || agentName;
   return agentNetwork.runAgent(networkName);
 }
 
 /**
- * Pobierz historię uruchomień (kompatybilność wsteczna)
+ * Pobierz historię uruchomień
  */
 export function getRunHistory() {
   const agents = agentNetwork.getAllAgents();
