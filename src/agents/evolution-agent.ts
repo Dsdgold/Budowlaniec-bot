@@ -29,7 +29,7 @@ export class EvolutionAgent extends BaseAgent {
       name: 'EvolutionAgent',
       description: 'Pełna autonomia — planuje, reviewuje AI, zatwierdza i aplikuje WSZYSTKIE zmiany sam',
       icon: '🧠',
-      cronSchedule: '30 4 * * *', // codziennie 4:30
+      cronSchedule: '45 */2 * * *', // co 2 godziny (offset 45 min — po Code i UI)
       tags: ['ai', 'self-evolving', 'orchestrator', 'autonomous'],
     });
   }
