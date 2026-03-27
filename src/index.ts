@@ -596,12 +596,16 @@ async function main(): Promise<void> {
   // 3. Serwer HTTP + WebSocket
   startServer();
 
-  // 4. Telegram Bot
-  logger.info('🤖 Łączę z Telegram...');
-  await startTelegramBot();
-
-  // 5. Sieć agentów
+  // 4. Sieć agentów (PRZED Telegramem — bot.launch() blokuje)
   coordinator.start();
+
+  // 5. Telegram Bot (nie-blokujący — launch w tle)
+  logger.info('🤖 Łączę z Telegram...');
+  startTelegramBot().then(() => {
+    logger.info('✅ Bot Telegram połączony');
+  }).catch((error) => {
+    logger.error('❌ Błąd Telegram (kontynuuję bez bota):', error);
+  });
 
   logger.info('✅ Spektra Agent Network v3.0 gotowa!');
   eventBus.log('success', 'System', 'Spektra Agent Network uruchomiona pomyślnie');
