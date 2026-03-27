@@ -32,9 +32,11 @@ CREATE TABLE IF NOT EXISTS analytics_insights (
     description TEXT,
     severity VARCHAR(20) DEFAULT 'info',
     data JSONB,
-    created_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE(type, title, DATE(created_at))
+    created_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_insights_unique
+  ON analytics_insights(type, title, (created_at::date));
 
 CREATE INDEX IF NOT EXISTS idx_insights_type ON analytics_insights(type);
 CREATE INDEX IF NOT EXISTS idx_insights_severity ON analytics_insights(severity);
