@@ -1,73 +1,77 @@
 /**
- * Agent cen — uruchamia scrapery, zapisuje do DB, wykrywa zmiany
+ * PriceAgent — scrapuje ceny materiałów budowlanych ze sklepów
+ * Refaktoryzacja na BaseAgent z pełnym lifecycle
  */
+import { BaseAgent, AgentResult } from '../core/agent';
 import { CastoramaScraper } from '../scrapers/castorama';
 import { LeroyScraper } from '../scrapers/leroy';
 import { TrzywScraper } from '../scrapers/trzyw';
 import { BechcickiScraper } from '../scrapers/bechcicki';
 import { bulkUpsertPrices } from '../db/prices';
 import { checkAndSendPriceAlerts } from '../reports/daily-prices';
+import { CRON_SCHEDULES } from '../config';
 import logger from '../utils/logger';
 
-/** Wynik działania agenta */
-export interface AgentResult {
-  success: boolean;
-  message: string;
-  data?: Record<string, any>;
-}
+export class PriceAgent extends BaseAgent {
+  private isScraping = false;
 
-/** Flaga zapobiegająca równoczesnemu scrapingowi */
-let isScraping = false;
-
-/**
- * Uruchom agenta cen — scrapuj wszystkie sklepy i zapisz wyniki
- */
-export async function run(): Promise<AgentResult> {
-  if (isScraping) {
-    logger.warn('⚠️ [PriceAgent] Scraping już trwa — pomijam');
-    return { success: false, message: 'Scraping już trwa' };
+  constructor() {
+    super({
+      name: 'PriceAgent',
+      description: 'Scrapuje ceny materiałów budowlanych z 4 sklepów',
+      icon: '📊',
+      cronSchedule: CRON_SCHEDULES.PRICE_SCRAPE,
+      tags: ['scraping', 'prices', 'core'],
+    });
   }
 
-  isScraping = true;
-  logger.info('🔄 [PriceAgent] Rozpoczynam scraping cen...');
-
-  const scrapers = [
-    new CastoramaScraper(),
-    new LeroyScraper(),
-    new TrzywScraper(),
-    new BechcickiScraper(),
-  ];
-
-  let totalProducts = 0;
-  let errors = 0;
-
-  for (const scraper of scrapers) {
-    try {
-      const products = await scraper.scrape();
-      const saved = await bulkUpsertPrices(products);
-      totalProducts += saved;
-    } catch (error) {
-      errors++;
-      logger.error(`❌ [PriceAgent] Błąd scrapera: ${(error as Error).message}`);
+  protected async execute(): Promise<AgentResult> {
+    if (this.isScraping) {
+      return { success: false, message: 'Scraping już trwa — pomijam' };
     }
 
-    // Pauza między scraperami (unikanie blokad)
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    this.isScraping = true;
+
+    const scrapers = [
+      new CastoramaScraper(),
+      new LeroyScraper(),
+      new TrzywScraper(),
+      new BechcickiScraper(),
+    ];
+
+    let totalProducts = 0;
+    let errors = 0;
+
+    for (const scraper of scrapers) {
+      try {
+        const products = await scraper.scrape();
+        const saved = await bulkUpsertPrices(products);
+        totalProducts += saved;
+      } catch (error) {
+        errors++;
+        logger.error(`❌ [PriceAgent] Błąd scrapera: ${(error as Error).message}`);
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+
+    this.isScraping = false;
+
+    // Sprawdź alerty cenowe
+    try {
+      await checkAndSendPriceAlerts();
+    } catch (error) {
+      logger.error('❌ [PriceAgent] Błąd sprawdzania alertów:', error);
+    }
+
+    return {
+      success: errors === 0,
+      message: `Scraping: ${totalProducts} produktów, ${errors} błędów`,
+      data: { totalProducts, errors, scrapers: scrapers.length },
+    };
   }
 
-  isScraping = false;
-  logger.info(`✅ [PriceAgent] Scraping zakończony: ${totalProducts} produktów, ${errors} błędów`);
-
-  // Po scrapingu sprawdź alerty cenowe
-  try {
-    await checkAndSendPriceAlerts();
-  } catch (error) {
-    logger.error('❌ [PriceAgent] Błąd sprawdzania alertów:', error);
+  async healthCheck(): Promise<boolean> {
+    return !this.isScraping && this.status !== 'error';
   }
-
-  return {
-    success: errors === 0,
-    message: `Scraping: ${totalProducts} produktów zapisanych, ${errors} błędów`,
-    data: { totalProducts, errors },
-  };
 }

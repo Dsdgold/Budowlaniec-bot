@@ -1,7 +1,7 @@
 {
-  "name": "budowlaniec-bot",
-  "version": "2.0.0",
-  "description": "Telegram bot do monitoringu cen materiałów budowlanych i newsów branżowych w Polsce — architektura multi-agent",
+  "name": "spektra-agent-network",
+  "version": "3.0.0",
+  "description": "Spektra Agent Network — zunifikowana sieć agentów: monitoring cen, leady budowlane, analytics. Hetzner ready.",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
@@ -22,7 +22,8 @@
     "zod": "^3.23.8",
     "winston": "^3.14.0",
     "p-queue": "^8.0.1",
-    "ioredis": "^5.4.1"
+    "ioredis": "^5.4.1",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^22.8.0",
@@ -33,7 +34,8 @@
     "ts-node": "^10.9.2",
     "eslint": "^9.12.0",
     "@typescript-eslint/parser": "^8.10.0",
-    "@typescript-eslint/eslint-plugin": "^8.10.0"
+    "@typescript-eslint/eslint-plugin": "^8.10.0",
+    "@types/ws": "^8.5.12"
   },
   "engines": {
     "node": ">=20.0.0"

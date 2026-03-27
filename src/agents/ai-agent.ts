@@ -1,53 +1,62 @@
 /**
- * Agent AI — obsługuje pytania /pytaj, cache, limity
- * Wrapper na askAssistant z dodatkową logiką agenta
+ * AIAgent — codzienne porządki: cache, limity, PRO
  */
-import { askAssistant } from '../ai/assistant';
+import { BaseAgent, AgentResult } from '../core/agent';
 import { cleanOldCache } from '../ai/cache';
 import { resetDailyAiQueries, deactivateExpiredPro } from '../db/users';
 import logger from '../utils/logger';
 
-/** Wynik działania agenta */
-export interface AgentResult {
-  success: boolean;
-  message: string;
-  data?: Record<string, any>;
+export class AIMaintenanceAgent extends BaseAgent {
+  constructor() {
+    super({
+      name: 'AIAgent',
+      description: 'Codzienne porządki: czyszczenie cache AI, reset limitów, dezaktywacja PRO',
+      icon: '🧹',
+      cronSchedule: '0 0 * * *',
+      tags: ['maintenance', 'ai', 'core'],
+    });
+  }
+
+  protected async execute(): Promise<AgentResult> {
+    let errors = 0;
+    let cacheCleared = false;
+    let limitsReset = false;
+    let proDeactivated = false;
+
+    try {
+      await cleanOldCache();
+      cacheCleared = true;
+    } catch (error) {
+      errors++;
+      logger.error('❌ [AIAgent] Błąd czyszczenia cache:', error);
+    }
+
+    try {
+      await resetDailyAiQueries();
+      limitsReset = true;
+    } catch (error) {
+      errors++;
+      logger.error('❌ [AIAgent] Błąd resetowania limitów:', error);
+    }
+
+    try {
+      await deactivateExpiredPro();
+      proDeactivated = true;
+    } catch (error) {
+      errors++;
+      logger.error('❌ [AIAgent] Błąd dezaktywacji PRO:', error);
+    }
+
+    return {
+      success: errors === 0,
+      message: `Porządki: cache=${cacheCleared}, limity=${limitsReset}, PRO=${proDeactivated} (błędy: ${errors})`,
+      data: { cacheCleared, limitsReset, proDeactivated, errors },
+    };
+  }
 }
 
-/**
- * Uruchom codzienne porządki AI:
- * - Wyczyść stary cache
- * - Resetuj limity dzienne
- * - Dezaktywuj wygasłe konta PRO
- */
+// Eksport kompatybilności wstecznej
 export async function runDailyMaintenance(): Promise<AgentResult> {
-  logger.info('🧹 [AIAgent] Codzienne porządki...');
-  let errors = 0;
-
-  try {
-    await cleanOldCache();
-  } catch (error) {
-    errors++;
-    logger.error('❌ [AIAgent] Błąd czyszczenia cache:', error);
-  }
-
-  try {
-    await resetDailyAiQueries();
-  } catch (error) {
-    errors++;
-    logger.error('❌ [AIAgent] Błąd resetowania limitów:', error);
-  }
-
-  try {
-    await deactivateExpiredPro();
-  } catch (error) {
-    errors++;
-    logger.error('❌ [AIAgent] Błąd dezaktywacji PRO:', error);
-  }
-
-  return {
-    success: errors === 0,
-    message: `Porządki: cache wyczyszczony, limity zresetowane (błędy: ${errors})`,
-    data: { errors },
-  };
+  const agent = new AIMaintenanceAgent();
+  return agent.run();
 }

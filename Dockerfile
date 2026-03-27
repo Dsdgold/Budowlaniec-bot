@@ -33,12 +33,14 @@ RUN apt-get update && apt-get install -y \
     libxcomposite1 \
     libxdamage1 \
     libxrandr2 \
+    curl \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Ustawienie ścieżki do Chromium dla Puppeteer
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV NODE_ENV=production
 
 WORKDIR /app
 
@@ -47,8 +49,12 @@ RUN npm install --omit=dev
 
 COPY --from=builder /app/dist ./dist
 COPY src/db/migrations ./dist/db/migrations
+COPY public/ ./public/
+COPY landing-page.html ./
 
 EXPOSE 3000
 
-# Uruchomienie bota
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD curl -f http://localhost:3000/health || exit 1
+
 CMD ["node", "dist/index.js"]

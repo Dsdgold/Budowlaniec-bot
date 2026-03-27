@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spektra Agent Network</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --bg-card: #1a1f35;
+      --bg-card-hover: #1f2642;
+      --border: #2a3050;
+      --border-bright: #3b4580;
+      --text-primary: #e8ecf4;
+      --text-secondary: #8892b0;
+      --text-muted: #5a6380;
+      --accent-blue: #60a5fa;
+      --accent-purple: #a78bfa;
+      --accent-green: #34d399;
+      --accent-red: #f87171;
+      --accent-yellow: #fbbf24;
+      --accent-cyan: #22d3ee;
+      --glow-blue: rgba(96, 165, 250, 0.15);
+      --glow-purple: rgba(167, 139, 250, 0.15);
+      --glow-green: rgba(52, 211, 153, 0.1);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated background */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(96, 165, 250, 0.08), transparent),
+        radial-gradient(ellipse 60% 40% at 80% 100%, rgba(167, 139, 250, 0.06), transparent);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .app { position: relative; z-index: 1; }
+
+    /* ─── HEADER ─── */
+    .header {
+      padding: 1.5rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      background: rgba(10, 14, 26, 0.8);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .header-left { display: flex; align-items: center; gap: 1rem; }
+
+    .logo {
+      font-size: 1.4rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .version {
+      font-size: 0.7rem;
+      padding: 0.2rem 0.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-muted);
+    }
+
+    .header-right { display: flex; align-items: center; gap: 1rem; }
+
+    .ws-status {
+      display: flex; align-items: center; gap: 0.4rem;
+      font-size: 0.75rem; color: var(--text-muted);
+    }
+
+    .ws-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent-red);
+      transition: background 0.3s;
+    }
+
+    .ws-dot.connected { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+
+    .refresh-time { font-size: 0.7rem; color: var(--text-muted); }
+
+    /* ─── MAIN LAYOUT ─── */
+    .main {
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 1.5rem;
+      padding: 1.5rem 2rem;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 1100px) {
+      .main { grid-template-columns: 1fr; }
+    }
+
+    /* ─── STATS ROW ─── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.8rem;
+      margin-bottom: 1.5rem;
+      grid-column: 1 / -1;
+    }
+
+    .stat {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.2rem;
+      transition: all 0.2s;
+    }
+
+    .stat:hover {
+      border-color: var(--border-bright);
+      transform: translateY(-1px);
+    }
+
+    .stat-icon { font-size: 1.3rem; margin-bottom: 0.3rem; }
+    .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+    .stat-label { font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.1rem; }
+    .stat-sub { font-size: 0.65rem; color: var(--text-muted); margin-top: 0.2rem; }
+
+    /* ─── CARDS ─── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-header {
+      padding: 1rem 1.2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-body { padding: 1rem 1.2rem; }
+
+    /* ─── AGENT GRID ─── */
+    .agents-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 0.8rem;
+    }
+
+    .agent-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      transition: all 0.2s;
+      cursor: default;
+    }
+
+    .agent-card:hover {
+      border-color: var(--border-bright);
+      background: var(--bg-card-hover);
+    }
+
+    .agent-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.6rem;
+    }
+
+    .agent-name {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .agent-icon { font-size: 1.2rem; }
+
+    .agent-badge {
+      font-size: 0.6rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-idle { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); }
+    .badge-running { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); animation: pulse 1.5s infinite; }
+    .badge-error { background: rgba(248, 113, 113, 0.15); color: var(--accent-red); }
+    .badge-disabled { background: rgba(90, 99, 128, 0.15); color: var(--text-muted); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .agent-desc {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-bottom: 0.6rem;
+      line-height: 1.4;
+    }
+
+    .agent-metrics {
+      display: flex;
+      gap: 0.8rem;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.6rem;
+    }
+
+    .agent-metric span { color: var(--text-primary); font-weight: 600; }
+
+    .agent-tags {
+      display: flex;
+      gap: 0.3rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.6rem;
+    }
+
+    .agent-tag {
+      font-size: 0.6rem;
+      padding: 0.1rem 0.4rem;
+      background: rgba(96, 165, 250, 0.08);
+      border: 1px solid rgba(96, 165, 250, 0.15);
+      border-radius: 4px;
+      color: var(--accent-blue);
+    }
+
+    .agent-actions { display: flex; gap: 0.4rem; }
+
+    .agent-btn {
+      font-size: 0.7rem;
+      padding: 0.35rem 0.7rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .agent-btn:hover {
+      border-color: var(--accent-blue);
+      color: var(--accent-blue);
+      background: rgba(96, 165, 250, 0.08);
+    }
+
+    .agent-btn.running {
+      border-color: var(--accent-yellow);
+      color: var(--accent-yellow);
+      cursor: not-allowed;
+    }
+
+    .agent-btn.toggle-off {
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+    }
+
+    /* ─── LIVE LOG ─── */
+    .log-container {
+      max-height: 600px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 0.72rem;
+      line-height: 1.7;
+    }
+
+    .log-entry {
+      padding: 0.3rem 0;
+      border-bottom: 1px solid rgba(42, 48, 80, 0.3);
+      display: flex;
+      gap: 0.5rem;
+      align-items: flex-start;
+    }
+
+    .log-time { color: var(--text-muted); white-space: nowrap; flex-shrink: 0; }
+    .log-source { color: var(--accent-purple); font-weight: 600; white-space: nowrap; flex-shrink: 0; min-width: 80px; }
+    .log-msg { color: var(--text-secondary); word-break: break-word; }
+
+    .log-entry.log-error .log-msg { color: var(--accent-red); }
+    .log-entry.log-success .log-msg { color: var(--accent-green); }
+    .log-entry.log-warn .log-msg { color: var(--accent-yellow); }
+
+    /* ─── CHART ─── */
+    .chart-controls {
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .chart-select {
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.4rem 0.8rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    .chart-select:focus { border-color: var(--accent-blue); outline: none; }
+    .chart-wrap { position: relative; height: 280px; margin-top: 1rem; }
+
+    /* ─── SIDEBAR ─── */
+    .sidebar { display: flex; flex-direction: column; gap: 1.5rem; }
+
+    /* ─── SCROLLBAR ─── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 768px) {
+      .header { padding: 1rem; flex-wrap: wrap; gap: 0.5rem; }
+      .main { padding: 1rem; gap: 1rem; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+      .agents-grid { grid-template-columns: 1fr; }
+      .stat-value { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">SPEKTRA</div>
+      <span class="version" id="versionBadge">v3.0.0</span>
+    </div>
+    <div class="header-right">
+      <div class="ws-status">
+        <div class="ws-dot" id="wsDot"></div>
+        <span id="wsLabel">Rozlaczony</span>
+      </div>
+      <span class="refresh-time" id="refreshTime"></span>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- STATS ROW -->
+    <div class="stats-row">
+      <div class="stat">
+        <div class="stat-icon">👥</div>
+        <div class="stat-value" id="sUsers">-</div>
+        <div class="stat-label">Uzytkownicy</div>
+        <div class="stat-sub" id="sUsersSub"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon">📦</div>
+        <div class="stat-value" id="sProducts">-</div>
+        <div class="stat-label">Produkty</div>
+        <div class="stat-sub" id="sProductsSub"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon">🏷️</div>
+        <div class="stat-value" id="sPromos">-</div>
+        <div class="stat-label">Promocje</div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon">📰</div>
+        <div class="stat-value" id="sNews">-</div>
+        <div class="stat-label">Newsy</div>
+        <div class="stat-sub" id="sNewsSub"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon">🎯</div>
+        <div class="stat-value" id="sLeads">-</div>
+        <div class="stat-label">Leady</div>
+        <div class="stat-sub" id="sLeadsSub"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon">📈</div>
+        <div class="stat-value" id="sInsights">-</div>
+        <div class="stat-label">Insights</div>
+        <div class="stat-sub" id="sInsightsSub"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon">🤖</div>
+        <div class="stat-value" id="sAgents">-</div>
+        <div class="stat-label">Agenci</div>
+        <div class="stat-sub" id="sAgentsSub"></div>
+      </div>
+    </div>
+
+    <!-- LEFT COLUMN -->
+    <div class="content">
+      <!-- AGENTS -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🤖 Siec Agentow</div>
+          <button class="agent-btn" onclick="runAllAgents()">Uruchom wszystkich</button>
+        </div>
+        <div class="card-body">
+          <div class="agents-grid" id="agentsGrid">
+            <div style="color:var(--text-muted);font-size:0.8rem">Ladowanie agentow...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHART -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📊 Wykres cen</div>
+          <div class="chart-controls">
+            <select class="chart-select" id="chartCategory"></select>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="chart-wrap">
+            <canvas id="priceChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT SIDEBAR -->
+    <div class="sidebar">
+      <!-- LIVE LOG -->
+      <div class="card" style="flex:1">
+        <div class="card-header">
+          <div class="card-title">📡 Live Log</div>
+          <button class="agent-btn" onclick="clearLog()">Wyczysc</button>
+        </div>
+        <div class="card-body" style="padding:0.6rem">
+          <div class="log-container" id="logContainer"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── STATE ───
+let ws = null;
+let chart = null;
+let currentCategory = 'cement';
+let agentsData = [];
+
+// ─── WEBSOCKET ───
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+
+  ws.onopen = () => {
+    document.getElementById('wsDot').classList.add('connected');
+    document.getElementById('wsLabel').textContent = 'Polaczony';
+    addLog('success', 'WebSocket', 'Polaczono z siecia agentow');
+  };
+
+  ws.onclose = () => {
+    document.getElementById('wsDot').classList.remove('connected');
+    document.getElementById('wsLabel').textContent = 'Rozlaczony';
+    setTimeout(connectWS, 3000);
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      handleWsMessage(msg);
+    } catch {}
+  };
+}
+
+function handleWsMessage(msg) {
+  switch (msg.type) {
+    case 'network:state':
+      updateNetworkState(msg.data);
+      break;
+    case 'logs:history':
+      (msg.data || []).forEach(l => addLogEntry(l));
+      break;
+    case 'log':
+      addLogEntry(msg.data);
+      break;
+    case 'agent:start':
+    case 'agent:complete':
+    case 'agent:error':
+      loadAgents();
+      break;
+    case 'agent:registered':
+      loadAgents();
+      break;
+  }
+}
+
+// ─── NETWORK STATE ───
+function updateNetworkState(state) {
+  if (!state) return;
+  document.getElementById('versionBadge').textContent = `v${state.version}`;
+  document.getElementById('sAgents').textContent = state.agents.length;
+  document.getElementById('sAgentsSub').textContent =
+    `${state.activeAgents} aktywnych / ${state.totalRuns} uruchomien`;
+  agentsData = state.agents;
+  renderAgents(state.agents);
+}
+
+// ─── AGENTS ───
+async function loadAgents() {
+  try {
+    const res = await fetch('/api/agents');
+    agentsData = await res.json();
+    renderAgents(agentsData);
+  } catch {}
+}
+
+function renderAgents(agents) {
+  const grid = document.getElementById('agentsGrid');
+  if (!agents || agents.length === 0) {
+    grid.innerHTML = '<div style="color:var(--text-muted)">Brak agentow</div>';
+    return;
+  }
+
+  grid.innerHTML = agents.map(a => {
+    const badgeClass = a.status === 'running' ? 'badge-running'
+      : a.status === 'error' ? 'badge-error'
+      : !a.enabled ? 'badge-disabled'
+      : 'badge-idle';
+
+    const statusText = a.status === 'running' ? 'RUNNING'
+      : a.status === 'error' ? 'ERROR'
+      : !a.enabled ? 'OFF'
+      : 'IDLE';
+
+    const m = a.metrics || {};
+    const successRate = m.totalRuns > 0 ? Math.round(m.successRuns / m.totalRuns * 100) : 0;
+    const lastRun = a.lastRun ? timeAgo(new Date(a.lastRun)) : 'nigdy';
+    const avgMs = m.avgDurationMs ? `${(m.avgDurationMs / 1000).toFixed(1)}s` : '-';
+
+    const tags = (a.tags || []).map(t => `<span class="agent-tag">${t}</span>`).join('');
+
+    return `
+      <div class="agent-card">
+        <div class="agent-top">
+          <div class="agent-name">
+            <span class="agent-icon">${a.icon}</span>
+            ${a.name}
+          </div>
+          <span class="agent-badge ${badgeClass}">${statusText}</span>
+        </div>
+        <div class="agent-desc">${a.description}</div>
+        <div class="agent-metrics">
+          <div class="agent-metric">Runs: <span>${m.totalRuns || 0}</span></div>
+          <div class="agent-metric">OK: <span>${successRate}%</span></div>
+          <div class="agent-metric">Avg: <span>${avgMs}</span></div>
+          <div class="agent-metric">Last: <span>${lastRun}</span></div>
+        </div>
+        <div class="agent-tags">${tags}</div>
+        <div class="agent-actions">
+          <button class="agent-btn ${a.status === 'running' ? 'running' : ''}"
+                  onclick="runAgent('${a.name}')"
+                  ${a.status === 'running' ? 'disabled' : ''}>
+            ${a.status === 'running' ? '⏳ Running...' : '▶ Uruchom'}
+          </button>
+          <button class="agent-btn ${!a.enabled ? 'toggle-off' : ''}"
+                  onclick="toggleAgent('${a.name}')">
+            ${a.enabled ? '⏸ Wylacz' : '▶ Wlacz'}
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function runAgent(name) {
+  try {
+    addLog('info', name, 'Uruchamiam agenta...');
+    await fetch(`/api/agents/${name}/run`, { method: 'POST' });
+  } catch(e) {
+    addLog('error', name, 'Blad uruchamiania: ' + e.message);
+  }
+}
+
+async function toggleAgent(name) {
+  try {
+    await fetch(`/api/agents/${name}/toggle`, { method: 'POST' });
+    loadAgents();
+  } catch {}
+}
+
+async function runAllAgents() {
+  addLog('info', 'Network', 'Uruchamiam wszystkich agentow...');
+  try {
+    await fetch('/agents/run-all', { method: 'POST' });
+  } catch {}
+}
+
+// ─── STATS ───
+async function loadStats() {
+  try {
+    const res = await fetch('/api/stats');
+    const d = await res.json();
+
+    if (d.users) {
+      document.getElementById('sUsers').textContent = d.users.total || 0;
+      document.getElementById('sUsersSub').textContent =
+        `${d.users.pro || 0} PRO / ${d.users.active_today || 0} dzis`;
+    }
+    if (d.products) {
+      document.getElementById('sProducts').textContent = d.products.total || 0;
+      document.getElementById('sProductsSub').textContent = `${d.products.with_prices || 0} z cenami`;
+      document.getElementById('sPromos').textContent = d.products.promos || 0;
+    }
+    if (d.news) {
+      document.getElementById('sNews').textContent = d.news.total || 0;
+      document.getElementById('sNewsSub').textContent =
+        `${d.news.today || 0} dzis / ${d.news.summarized || 0} AI`;
+    }
+    if (d.leads) {
+      document.getElementById('sLeads').textContent = d.leads.total || 0;
+      document.getElementById('sLeadsSub').textContent = `${d.leads.today || 0} dzis / ${d.leads.new || 0} nowych`;
+    }
+    if (d.insights) {
+      document.getElementById('sInsights').textContent = d.insights.total || 0;
+      document.getElementById('sInsightsSub').textContent = `${d.insights.today || 0} dzis`;
+    }
+
+    document.getElementById('refreshTime').textContent = new Date().toLocaleTimeString('pl-PL');
+  } catch {}
+}
+
+// ─── CHART ───
+async function loadCategories() {
+  try {
+    const res = await fetch('/api/categories');
+    const cats = await res.json();
+    const sel = document.getElementById('chartCategory');
+    sel.innerHTML = cats.map(c => `<option value="${c.slug}">${c.label}</option>`).join('');
+    sel.value = currentCategory;
+    sel.onchange = () => { currentCategory = sel.value; loadChart(); };
+  } catch {}
+}
+
+function initChart() {
+  const ctx = document.getElementById('priceChart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Srednia (zl)',
+          data: [],
+          borderColor: '#60a5fa',
+          backgroundColor: 'rgba(96,165,250,0.08)',
+          fill: true, tension: 0.4, pointRadius: 2, borderWidth: 2,
+        },
+        {
+          label: 'Min',
+          data: [],
+          borderColor: '#34d399',
+          borderDash: [4, 4], fill: false, tension: 0.4, pointRadius: 0, borderWidth: 1,
+        },
+        {
+          label: 'Max',
+          data: [],
+          borderColor: '#f87171',
+          borderDash: [4, 4], fill: false, tension: 0.4, pointRadius: 0, borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#8892b0', font: { size: 11 } } },
+      },
+      scales: {
+        x: { ticks: { color: '#5a6380', maxRotation: 45 }, grid: { color: 'rgba(42,48,80,0.3)' } },
+        y: { ticks: { color: '#5a6380', callback: v => v + ' zl' }, grid: { color: 'rgba(42,48,80,0.3)' } },
+      },
+    },
+  });
+}
+
+async function loadChart() {
+  try {
+    const res = await fetch(`/api/prices/chart/${currentCategory}`);
+    const data = await res.json();
+    chart.data.labels = data.map(d => {
+      const dt = new Date(d.date);
+      return dt.toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit' });
+    });
+    chart.data.datasets[0].data = data.map(d => Number(d.avg_price));
+    chart.data.datasets[1].data = data.map(d => Number(d.min_price));
+    chart.data.datasets[2].data = data.map(d => Number(d.max_price));
+    chart.update();
+  } catch {}
+}
+
+// ─── LOG ───
+function addLogEntry(entry) {
+  const container = document.getElementById('logContainer');
+  const time = new Date(entry.timestamp).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const div = document.createElement('div');
+  div.className = `log-entry log-${entry.level}`;
+  div.innerHTML = `<span class="log-time">${time}</span><span class="log-source">${entry.source}</span><span class="log-msg">${entry.message}</span>`;
+  container.appendChild(div);
+
+  // Auto-scroll + limit
+  while (container.children.length > 200) container.removeChild(container.firstChild);
+  container.scrollTop = container.scrollHeight;
+}
+
+function addLog(level, source, message) {
+  addLogEntry({ timestamp: new Date(), level, source, message });
+}
+
+function clearLog() {
+  document.getElementById('logContainer').innerHTML = '';
+}
+
+// ─── UTILS ───
+function timeAgo(date) {
+  const s = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (s < 60) return `${s}s temu`;
+  if (s < 3600) return `${Math.floor(s/60)}m temu`;
+  if (s < 86400) return `${Math.floor(s/3600)}h temu`;
+  return `${Math.floor(s/86400)}d temu`;
+}
+
+// ─── INIT ───
+document.addEventListener('DOMContentLoaded', () => {
+  connectWS();
+  initChart();
+  loadCategories();
+  loadStats();
+  loadAgents();
+  loadChart();
+
+  // Auto-refresh co 30s
+  setInterval(() => {
+    loadStats();
+    loadAgents();
+    loadChart();
+  }, 30000);
+});
+</script>
+</body>
+</html>
