@@ -441,6 +441,78 @@ function startServer(): http.Server {
     }
   });
 
+  // ─── EVOLUTION API ───
+
+  // Lista task queue
+  app.get('/api/evolution/tasks', async (req, res) => {
+    try {
+      const status = req.query.status as string;
+      let sql = 'SELECT * FROM code_tasks';
+      const params: any[] = [];
+      if (status) { params.push(status); sql += ` WHERE status = $${params.length}`; }
+      sql += ' ORDER BY created_at DESC LIMIT 50';
+      res.json(await query(sql, params));
+    } catch (error) { res.status(500).json({ error: 'Błąd' }); }
+  });
+
+  // Szczegóły zadania
+  app.get('/api/evolution/tasks/:id', async (req, res) => {
+    try {
+      const data = await query('SELECT * FROM code_tasks WHERE id = $1', [req.params.id]);
+      if (data.length === 0) { res.status(404).json({ error: 'Nie znaleziono' }); return; }
+      res.json(data[0]);
+    } catch (error) { res.status(500).json({ error: 'Błąd' }); }
+  });
+
+  // Utwórz nowe zadanie (ręcznie z dashboardu)
+  app.post('/api/evolution/tasks', async (req, res) => {
+    try {
+      const { type, title, description, priority } = req.body;
+      if (!title) { res.status(400).json({ error: 'Brak tytułu' }); return; }
+      const result = await query(
+        `INSERT INTO code_tasks (type, title, description, priority, source, status)
+         VALUES ($1, $2, $3, $4, 'dashboard', 'pending') RETURNING *`,
+        [type || 'improvement', title, description || '', priority || 'medium'],
+      );
+      res.json(result[0]);
+    } catch (error) { res.status(500).json({ error: 'Błąd tworzenia zadania' }); }
+  });
+
+  // Zatwierdź zadanie
+  app.post('/api/evolution/tasks/:id/approve', async (req, res) => {
+    try {
+      await query('UPDATE code_tasks SET status = $1, updated_at = NOW() WHERE id = $2', ['approved', req.params.id]);
+      eventBus.log('success', 'API', `Zadanie #${req.params.id} zatwierdzone`);
+      res.json({ success: true });
+    } catch (error) { res.status(500).json({ error: 'Błąd' }); }
+  });
+
+  // Odrzuć zadanie
+  app.post('/api/evolution/tasks/:id/reject', async (req, res) => {
+    try {
+      await query('UPDATE code_tasks SET status = $1, updated_at = NOW() WHERE id = $2', ['rejected', req.params.id]);
+      eventBus.log('info', 'API', `Zadanie #${req.params.id} odrzucone`);
+      res.json({ success: true });
+    } catch (error) { res.status(500).json({ error: 'Błąd' }); }
+  });
+
+  // Statystyki ewolucji
+  app.get('/api/evolution/stats', async (_req, res) => {
+    try {
+      const result = await query(`
+        SELECT
+          COUNT(*) as total,
+          COUNT(*) FILTER (WHERE status = 'pending') as pending,
+          COUNT(*) FILTER (WHERE status = 'review') as review,
+          COUNT(*) FILTER (WHERE status = 'approved') as approved,
+          COUNT(*) FILTER (WHERE status = 'applied') as applied,
+          COUNT(*) FILTER (WHERE status = 'rejected') as rejected
+        FROM code_tasks
+      `);
+      res.json(result[0] || {});
+    } catch (error) { res.status(500).json({ error: 'Błąd' }); }
+  });
+
   // ─── DASHBOARD & LANDING ───
 
   app.get('/dashboard', (_req, res) => {

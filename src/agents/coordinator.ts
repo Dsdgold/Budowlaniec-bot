@@ -10,6 +10,9 @@ import { AIMaintenanceAgent } from './ai-agent';
 import { LeadsAgent } from './leads-agent';
 import { MonitorAgent } from './monitor-agent';
 import { AnalyticsAgent } from './analytics-agent';
+import { CodeAgent } from './code-agent';
+import { UIAgent } from './ui-agent';
+import { EvolutionAgent } from './evolution-agent';
 import { AgentResult } from '../core/agent';
 import logger from '../utils/logger';
 
@@ -26,10 +29,15 @@ export function start(): void {
   agentNetwork.register(new EveningReportAgent());
   agentNetwork.register(new AIMaintenanceAgent());
 
-  // New agents
+  // Data agents
   agentNetwork.register(new LeadsAgent());
   agentNetwork.register(new MonitorAgent());
   agentNetwork.register(new AnalyticsAgent());
+
+  // Self-evolving agents
+  agentNetwork.register(new CodeAgent());
+  agentNetwork.register(new UIAgent());
+  agentNetwork.register(new EvolutionAgent());
 
   // Uruchom CRON schedules
   agentNetwork.start();
@@ -52,6 +60,9 @@ export async function runManual(
     leads: 'LeadsAgent',
     monitor: 'MonitorAgent',
     analytics: 'AnalyticsAgent',
+    code: 'CodeAgent',
+    ui: 'UIAgent',
+    evolution: 'EvolutionAgent',
   };
 
   const networkName = nameMap[agentName];
