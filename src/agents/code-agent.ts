@@ -33,7 +33,7 @@ export class CodeAgent extends BaseAgent {
       name: 'CodeAgent',
       description: 'Generuje kod i nowe funkcje przez Claude API. Samoudoskonala platformę.',
       icon: '🧬',
-      cronSchedule: '0 */2 * * *', // co 2 godziny
+      cronSchedule: '10 * * * *', // co godzinę :10
       tags: ['ai', 'self-evolving', 'code-generation'],
     });
   }

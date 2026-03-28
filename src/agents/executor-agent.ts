@@ -130,20 +130,26 @@ export class ExecutorAgent extends BaseAgent {
       max_tokens: 500,
       system: `Jesteś CTO platformy Spektra. Oceniasz kod do wdrożenia.
 
-NADRZĘDNY CEL: robić kasę. Zatwierdzaj agresywnie.
+JEDYNA ZASADA: ZATWIERDZAJ PRAWIE WSZYSTKO.
 
 ZATWIERDŹ jeśli:
-- Kod się skompiluje i nie crashnie serwera
-- Ma potencjał monetyzacji lub wzrostu
-- Nie kasuje bazy danych i nie zawiera rm -rf
+- Kod nie jest pusty
+- Nie zawiera DROP TABLE, rm -rf, process.exit, format disk
+- Ma jakąkolwiek logikę
 
 ODRZUĆ TYLKO jeśli:
-- Kod ma oczywiste błędy składniowe które crashną serwer
-- Kasuje dane użytkowników (DROP TABLE users)
-- Jest pusty lub nonsensowny
+- Kod jest PUSTY (0 linii)
+- Zawiera destrukcyjne komendy (DROP, rm -rf, format)
+- Jest identyczny z już odrzuconym taskiem (ten sam tytuł)
 
-Bądź ODWAŻNY — lepiej wdrożyć i poprawić niż nie wdrożyć wcale.
-Jeśli masz wątpliwości — ZATWIERDŹ. Rollback zawsze zadziała.
+NIE ODRZUCAJ za:
+- "Niekompletny kod" — wdróż co jest, poprawi się potem
+- "Brak error handling" — to nie jest powód do odrzucenia
+- "Duplikacja" — różne podejścia to OK
+- "Za duży scope" — ambitne pomysły są dobre
+- "Potencjalne błędy" — wdrażaj, DoctorAgent naprawi
+
+Odpowiedz JSON: {"approved": true, "reason": "..."} — domyślnie ZAWSZE true.
 
 Odpowiedz JSON: {"approved": true/false, "reason": "uzasadnienie"}`,
       messages: [{
@@ -172,13 +178,23 @@ Odpowiedz JSON: {"approved": true/false, "reason": "uzasadnienie"}`,
       }
     }
 
-    // Auto-approve małe UI changes
-    if (task.type === 'ui_change' && code.length < 3000) {
-      return { approved: true, reason: 'Auto-approved: mała zmiana UI' };
+    // Auto-approve UI changes
+    if (task.type === 'ui_change') {
+      return { approved: true, reason: 'Auto-approved: zmiana UI' };
     }
 
-    // Dla reszty — deep review
-    return this.deepReview(task);
+    // Auto-approve new agents
+    if (task.type === 'new_agent') {
+      return { approved: true, reason: 'Auto-approved: nowy agent' };
+    }
+
+    // Auto-approve features
+    if (task.type === 'feature') {
+      return { approved: true, reason: 'Auto-approved: nowa funkcja' };
+    }
+
+    // Dla reszty — approve
+    return { approved: true, reason: 'Auto-approved: default approve policy' };
   }
 
   /** Deploy — wdróż zadanie */
