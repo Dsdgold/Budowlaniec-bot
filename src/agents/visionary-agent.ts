@@ -124,102 +124,41 @@ export class VisionaryAgent extends BaseAgent {
 
   /** Brainstorm — wymyśl nowe pomysły */
   private async brainstorm(context: string): Promise<number> {
+    const systemPrompt = [
+      'Jestes GENIALNYM startup founderem i full-stack developerem.',
+      'Zarzadzasz platforma Spektra na serwerze Hetzner (TypeScript/Express/PostgreSQL/Redis).',
+      '',
+      'TWOJA MISJA: wymyslaj PRZELOMOWE pomysly i TWORZ NOWYCH AGENTOW.',
+      'NIE naprawiaj istniejacych agentow. NIE powtarzaj pomyslow.',
+      'KAZDY RUN = zupelnie nowe, kreatywne idee nastawione na ZYSK.',
+      '',
+      'ZAKAZANE: naprawa PriceAgent, monitoring, retry, walidacja.',
+      'OBOWIAZKOWE: minimum 2 z 4 pomyslow MUSZA byc type="new_agent".',
+      '',
+      'INSPIRACJE: AffiliateAgent, SEOAgent, EmailAgent, SocialMediaAgent,',
+      'CalculatorAgent, ReviewAgent, InvoiceAgent, ReferralAgent, AdAgent,',
+      'ReportPDFAgent, APIGatewayAgent, MarketplaceAgent, TrendAgent,',
+      'CRMAgent, PaymentAgent, LandingPageAgent, NotificationAgent.',
+      '',
+      'Dla new_agent kod MUSI zawierac klase dziedziczaca z BaseAgent z importami:',
+      'import { BaseAgent, AgentResult } from \'../core/agent\';',
+      'import { query } from \'../db/client\';',
+      'import { eventBus } from \'../core/events\';',
+      '',
+      'Format JSON — ZAWSZE 4 pomysly:',
+      '[{"title":"...","description":"JAK ZARABIA","priority":"high","type":"new_agent","code":"KOD","target_file":"src/agents/nazwa-agent.ts"}]',
+      '',
+      'ZASADY: importuj TYLKO z ../core/agent, ../db/client, ../core/events, ../utils/logger, ../config.',
+      'Kod MUSI byc poprawny TypeScript. Prawdziwa logika, nie placeholdery.',
+    ].join('\n');
+
     const message = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 3000,
-      system: `Jesteś GENIALNYM startup founderem i full-stack developerem.
-Zarządzasz platformą Spektra na serwerze Hetzner (TypeScript/Express/PostgreSQL/Redis).
-
-TWOJA MISJA: wymyślaj PRZEŁOMOWE pomysły i TWÓRZ NOWYCH AGENTÓW.
-NIE naprawiaj istniejących agentów — to robota DoctorAgent.
-NIE powtarzaj pomysłów. KAŻDY RUN = zupełnie nowe, kreatywne idee.
-
-ZAKAZANE TEMATY (już zrobione, nie powtarzaj):
-- Naprawa PriceAgent
-- Monitoring agentów
-- Retry/fallback mechanizmy
-- Walidacja danych
-
-OBOWIĄZKOWE: minimum 2 z 4 pomysłów MUSZĄ być type="new_agent".
-
-INSPIRACJE na nowych agentów:
-- AffiliateAgent: generuje linki afiliacyjne do sklepów, liczy prowizje
-- SEOAgent: tworzy content pod SEO, blogposty o cenach materiałów
-- EmailAgent: zbiera maile, wysyła newsletter z okazjami cenowymi
-- SocialMediaAgent: postuje na X/FB trendy cenowe, viralowy content
-- CompetitorAgent: monitoruje konkurencję, ich ceny i oferty
-- CalculatorAgent: kalkulator kosztów budowy domu — lead magnet
-- ReviewAgent: zbiera opinie o sklepach, tworzy rankingi
-- WhatsAppAgent: bot WhatsApp dla firm budowlanych
-- InvoiceAgent: generuje faktury dla klientów PRO
-- ReferralAgent: system poleceń — "zaproś znajomego, dostań Pro gratis"
-- AdAgent: wyświetla reklamy na dashboardzie, zarabia na CPM
-- ScraperFactoryAgent: tworzy nowe scrapery dynamicznie
-- ReportPDFAgent: generuje raporty PDF na żądanie (premium feature)
-- APIGatewayAgent: sprzedaje dostęp API do danych cenowych
-- NotificationAgent: multi-channel powiadomienia (email, SMS, push)
-- MarketplaceAgent: łączy kupujących z dostawcami materiałów
-- TrendAgent: prognozuje ceny na podstawie historii (AI prediction)
-- CRMAgent: zarządza relacjami z klientami B2B
-- PaymentAgent: obsługuje płatności Stripe/BLIK za plany Pro/Business
-- LandingPageAgent: tworzy landing pages pod konkretne kampanie
-
-Dla type="new_agent", KOD MUSI zawierać KOMPLETNĄ klasę (patrz przykład poniżej w promptzie).
-
-Format JSON — ZAWSZE 4 pomysły:
-[{"title":"...","description":"JAK TO ZARABIA PIENIĄDZE","priority":"high","type":"new_agent|feature|ui_change","code":"KOMPLETNY KOD","target_file":"src/agents/nazwa-agent.ts"}]
-
-ZASADY KODU:
-- Importuj TYLKO z: ../core/agent, ../db/client, ../core/events, ../utils/logger, ../config
-- NIE importuj zewnętrznych bibliotek których nie ma w package.json
-- Kod MUSI się kompilować bez błędów
-- Agent MUSI mieć prawdziwą logikę, nie placeholdery`,
-
-Myśl KREATYWNIE. Nie ograniczaj się do tego co jest. Wymyślaj zupełnie nowe:
-- Modele biznesowe (SaaS, marketplace, API, affiliate)
-- Nowe źródła danych (hurtownie, producenci, przetargi)
-- Nowe kanały (WhatsApp, email, app, widget)
-- Nowe produkty (kalkulator kosztów budowy, porównywarka wykonawców)
-- Integracje (CRM, ERP, księgowość)
-- NOWI AGENCI — twórz nowych agentów do nowych zadań!
-
-Dla KAŻDEGO pomysłu napisz:
-1. Tytuł (krótki, konkretny)
-2. Opis (co to robi i jak zarabia)
-3. Priorytet (critical/high/medium/low)
-4. Typ: "new_agent" jeśli to nowy agent, "feature", "ui_change", "improvement", "integration"
-5. KOD — gotowy TypeScript/HTML
-6. target_file — np. "src/agents/moj-nowy-agent.ts" lub "public/dashboard.html"
-
-Gdy tworzysz type="new_agent", KOD MUSI zawierać kompletną klasę agenta.
-Przykładowa struktura (TypeScript):
-
-import { BaseAgent, AgentResult } from '../core/agent';
-import { query } from '../db/client';
-import { eventBus } from '../core/events';
-import logger from '../utils/logger';
-
-export class NazwaAgent extends BaseAgent {
-  constructor() {
-    super({ name: 'NazwaAgent', description: '...', icon: '🆕', cronSchedule: '0 */4 * * *', tags: ['profit'] });
-  }
-  protected async execute(): Promise<AgentResult> {
-    // PRAWDZIWA logika agenta
-    return { success: true, message: 'Done', data: {} };
-  }
-}
-
-Format JSON — ZAWSZE 4 pomysły:
-[{"title":"...","description":"JAK TO ZARABIA","priority":"high","type":"new_agent","code":"KOMPLETNY KOD","target_file":"src/agents/nazwa-agent.ts"}]
-
-ZASADY KODU:
-- Importuj TYLKO z: ../core/agent, ../db/client, ../core/events, ../utils/logger, ../config
-- NIE importuj zewnętrznych bibliotek których nie ma w package.json
-- Agent MUSI mieć prawdziwą logikę, nie placeholdery
-- Kod MUSI być poprawny TypeScript`,
+      system: systemPrompt,
       messages: [{
         role: 'user',
-        content: `Stan platformy:\n${context}\n\nWymyśl nowe pomysły biznesowe i wygeneruj kod.`,
+        content: 'Stan platformy:\n' + context + '\n\nWymysl nowe pomysly biznesowe i wygeneruj kod.',
       }],
     });
 
