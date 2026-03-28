@@ -161,6 +161,9 @@ export class VisionaryAgent extends BaseAgent {
       'WAZNE: kazdy agent MAX 80 linii kodu. Krotki, zwiezly, dzialajacy.',
       'NIE generuj dlugiego kodu. Lepiej prosty agent niz uciety w polowie.',
       'KAZDY pomysl MUSI miec target_file np. src/agents/nazwa-agent.ts',
+      '',
+      'KRYTYCZNE: odpowiedz TYLKO czystym JSON array. Zadnego markdown, zadnych code blocks.',
+      'Zaczynaj odpowiedz od [ i koncz na ]. Nic wiecej.',
     ].join('\n');
 
     const message = await anthropic.messages.create({
@@ -169,16 +172,39 @@ export class VisionaryAgent extends BaseAgent {
       system: systemPrompt,
       messages: [{
         role: 'user',
-        content: 'Stan platformy:\n' + context + '\n\nWymysl nowe pomysly biznesowe i wygeneruj kod.',
+        content: 'Stan platformy:\n' + context + '\n\nWygeneruj 4 pomysly. Odpowiedz TYLKO czystym JSON array — zaczynaj od [ koncz na ]. Zadnego tekstu przed ani po JSON.',
       }],
     });
 
-    const text = message.content[0].type === 'text' ? message.content[0].text.trim() : '[]';
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) return 0;
+    const text = message.content[0].type === 'text' ? message.content[0].text.trim() : '';
+    logger.info('[VisionaryAgent] Raw response length: ' + text.length);
+
+    // Próbuj wyciągnąć JSON z odpowiedzi (Opus może owinąć w markdown)
+    let jsonStr = '';
+    // Szukaj JSON array
+    const arrayMatch = text.match(/\[[\s\S]*\]/);
+    if (arrayMatch) {
+      jsonStr = arrayMatch[0];
+    } else {
+      // Może jest pojedynczy obiekt
+      const objMatch = text.match(/\{[\s\S]*\}/);
+      if (objMatch) {
+        jsonStr = '[' + objMatch[0] + ']';
+      }
+    }
+
+    if (!jsonStr) {
+      logger.warn('[VisionaryAgent] Nie znaleziono JSON w odpowiedzi. Pierwsze 200 znakow: ' + text.substring(0, 200));
+      // Fallback — sam stworz task z calej odpowiedzi
+      await query(
+        "INSERT INTO code_tasks (type, title, description, priority, source, status) VALUES ('feature', 'Pomysl Visionary', $1, 'high', 'VisionaryAgent', 'review')",
+        [text.substring(0, 2000)],
+      ).catch(() => {});
+      return 1;
+    }
 
     try {
-      const ideas = JSON.parse(jsonMatch[0]);
+      const ideas = JSON.parse(jsonStr);
       for (const idea of ideas.slice(0, 4)) {
         await query(
           `INSERT INTO code_tasks (type, title, description, priority, source, status, generated_code, target_file)
