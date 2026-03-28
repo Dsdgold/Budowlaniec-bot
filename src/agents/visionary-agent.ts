@@ -15,7 +15,7 @@ import path from 'path';
 import logger from '../utils/logger';
 
 const anthropic = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
-const MODEL = 'claude-opus-4-6';
+const MODEL = 'claude-sonnet-4-6'; // Sonnet zamiast Opus — 10x taniej, nadal świetny
 
 export class VisionaryAgent extends BaseAgent {
   constructor() {
@@ -23,7 +23,7 @@ export class VisionaryAgent extends BaseAgent {
       name: 'VisionaryAgent',
       description: 'WŁADCA #1 — wymyśla nowe pomysły, features, monetyzację. Ma kontrolę nad całą platformą.',
       icon: '👁️',
-      cronSchedule: '*/30 * * * *', // co 30 minut — non-stop generowanie pomysłów
+      cronSchedule: '0 */2 * * *', // co 2 godziny — balans koszt/efektywnosc
       tags: ['master', 'visionary', 'strategy', 'autonomous'],
     });
   }
@@ -195,7 +195,7 @@ export class VisionaryAgent extends BaseAgent {
 
     const message = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 8000,
+      max_tokens: 4000, // ograniczenie kosztow
       system: systemPrompt,
       messages: [{
         role: 'user',

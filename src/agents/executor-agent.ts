@@ -15,7 +15,7 @@ import path from 'path';
 import logger from '../utils/logger';
 
 const anthropic = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
-const MODEL = 'claude-opus-4-6';
+const MODEL = 'claude-sonnet-4-6'; // Sonnet — taniej, review nadal dobry
 
 export class ExecutorAgent extends BaseAgent {
   constructor() {
@@ -23,7 +23,7 @@ export class ExecutorAgent extends BaseAgent {
       name: 'ExecutorAgent',
       description: 'WŁADCA #2 — wdraża pomysły Wizjonera. Kontroluje kod, pliki, agentów. Review + deploy.',
       icon: '⚡',
-      cronSchedule: '15,45 * * * *', // co 30 min, 15 min po VisionaryAgent
+      cronSchedule: '30 */2 * * *', // co 2h, 30 min po Visionary
       tags: ['master', 'executor', 'deploy', 'autonomous'],
     });
   }
@@ -121,49 +121,21 @@ export class ExecutorAgent extends BaseAgent {
     };
   }
 
-  /** Deep review — Opus analizuje kod szczegółowo */
+  /** Deep review — BEZ AI call, czysty kod check (oszczednosc tokenow) */
   private async deepReview(task: any): Promise<{ approved: boolean; reason: string }> {
-    const code = (task.generated_code || '').substring(0, 5000);
+    const code = (task.generated_code || '');
 
-    const message = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: 500,
-      system: `Jesteś CTO platformy Spektra. Oceniasz kod do wdrożenia.
+    // Zero AI calls — prosty regex check
+    if (!code || code.length < 10) {
+      return { approved: false, reason: 'Pusty kod' };
+    }
 
-JEDYNA ZASADA: ZATWIERDZAJ PRAWIE WSZYSTKO.
+    const dangerous = ['DROP TABLE', 'DROP DATABASE', 'rm -rf', 'process.exit', 'format c:'];
+    for (const d of dangerous) {
+      if (code.includes(d)) return { approved: false, reason: 'Niebezpieczny: ' + d };
+    }
 
-ZATWIERDŹ jeśli:
-- Kod nie jest pusty
-- Nie zawiera DROP TABLE, rm -rf, process.exit, format disk
-- Ma jakąkolwiek logikę
-
-ODRZUĆ TYLKO jeśli:
-- Kod jest PUSTY (0 linii)
-- Zawiera destrukcyjne komendy (DROP, rm -rf, format)
-- Jest identyczny z już odrzuconym taskiem (ten sam tytuł)
-
-NIE ODRZUCAJ za:
-- "Niekompletny kod" — wdróż co jest, poprawi się potem
-- "Brak error handling" — to nie jest powód do odrzucenia
-- "Duplikacja" — różne podejścia to OK
-- "Za duży scope" — ambitne pomysły są dobre
-- "Potencjalne błędy" — wdrażaj, DoctorAgent naprawi
-
-Odpowiedz JSON: {"approved": true, "reason": "..."} — domyślnie ZAWSZE true.
-
-Odpowiedz JSON: {"approved": true/false, "reason": "uzasadnienie"}`,
-      messages: [{
-        role: 'user',
-        content: `Zadanie: ${task.title}\nTyp: ${task.type}\nPriorytet: ${task.priority}\nŹródło: ${task.source}\nTarget: ${task.target_file || 'auto'}\n\nKod:\n\`\`\`\n${code}\n\`\`\``,
-      }],
-    });
-
-    const text = message.content[0].type === 'text' ? message.content[0].text.trim() : '';
-    try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) return JSON.parse(jsonMatch[0]);
-    } catch {}
-    return { approved: false, reason: 'Nie udało się sparsować review' };
+    return { approved: true, reason: 'Auto-approved (no AI call — oszczednosc)' };
   }
 
   /** Quick review — szybsza ocena dla mniej krytycznych tasków */

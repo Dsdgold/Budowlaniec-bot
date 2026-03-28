@@ -11,7 +11,7 @@ import { config } from '../config';
 import logger from '../utils/logger';
 
 const anthropic = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
-const MODEL = 'claude-opus-4-6';
+const MODEL = 'claude-haiku-4-5-20251001'; // Haiku — najtanszy, wystarczy do kodu
 
 /** Zadanie do wykonania przez CodeAgent */
 export interface CodeTask {
@@ -33,7 +33,7 @@ export class CodeAgent extends BaseAgent {
       name: 'CodeAgent',
       description: 'Generuje kod i nowe funkcje przez Claude API. Samoudoskonala platformę.',
       icon: '🧬',
-      cronSchedule: '10 * * * *', // co godzinę :10
+      cronSchedule: '10 */3 * * *', // co 3 godziny
       tags: ['ai', 'self-evolving', 'code-generation'],
     });
   }

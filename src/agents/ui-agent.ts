@@ -21,7 +21,7 @@ export class UIAgent extends BaseAgent {
       name: 'UIAgent',
       description: 'Ewoluuje dashboard i UI — generuje widgety, poprawia UX, dodaje wizualizacje',
       icon: '🎨',
-      cronSchedule: '20 * * * *', // co godzinę :20
+      cronSchedule: '20 */4 * * *', // co 4 godziny
       tags: ['ai', 'self-evolving', 'ui', 'dashboard'],
     });
   }
