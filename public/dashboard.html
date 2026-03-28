@@ -4,6 +4,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Spektra Agent Network</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#60a5fa">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="/icon-192.svg" type="image/svg+xml">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
   <style>
     :root {
@@ -473,6 +478,8 @@
         <span id="wsLabel">Rozlaczony</span>
       </div>
       <span class="refresh-time" id="refreshTime"></span>
+      <button class="agent-btn" id="installBtn" style="display:none" onclick="installPWA()">📱 Zainstaluj</button>
+      <button class="agent-btn" id="notifBtn" onclick="enableNotifications()">🔔</button>
     </div>
   </header>
 
@@ -977,6 +984,67 @@ async function rejectTask(id) {
   await fetch(`/api/evolution/tasks/${id}/reject`, { method: 'POST' });
   addLog('info', 'Evolution', `Zadanie #${id} odrzucone`);
   loadEvolution();
+}
+
+// ─── PWA + NOTIFICATIONS ───
+let deferredPrompt = null;
+
+// Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').then(reg => {
+    console.log('SW registered');
+    // Poll for notifications co 60s
+    setInterval(() => {
+      if (reg.active) reg.active.postMessage('check-notifications');
+    }, 60000);
+  }).catch(e => console.log('SW error:', e));
+}
+
+// Install prompt
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBtn').style.display = 'inline-block';
+});
+
+async function installPWA() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const result = await deferredPrompt.userChoice;
+  if (result.outcome === 'accepted') {
+    document.getElementById('installBtn').style.display = 'none';
+    addLog('success', 'PWA', 'Aplikacja zainstalowana na urzadzeniu!');
+  }
+  deferredPrompt = null;
+}
+
+async function enableNotifications() {
+  if (!('Notification' in window)) {
+    addLog('error', 'PWA', 'Przegladarka nie wspiera powiadomien');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    document.getElementById('notifBtn').textContent = '🔔✓';
+    addLog('success', 'PWA', 'Powiadomienia wlaczone!');
+    // Testowe powiadomienie
+    new Notification('Spektra', { body: 'Powiadomienia aktywne! Bedziesz dostawac alerty o zmianach.', icon: '/icon-192.svg' });
+    // Start polling
+    pollNotifications();
+  }
+}
+
+let lastNotifCheck = Date.now();
+async function pollNotifications() {
+  try {
+    const res = await fetch(`/api/notifications?since=${lastNotifCheck}`);
+    const data = await res.json();
+    lastNotifCheck = Date.now();
+    for (const n of (data.notifications || [])) {
+      new Notification(n.title, { body: n.body, icon: '/icon-192.svg', tag: n.tag });
+    }
+  } catch {}
+  setTimeout(pollNotifications, 60000);
 }
 
 // ─── INIT ───

@@ -441,6 +441,82 @@ function startServer(): http.Server {
     }
   });
 
+  // ─── NOTIFICATIONS API (dla PWA Android) ───
+
+  app.get('/api/notifications', async (req, res) => {
+    try {
+      const since = parseInt(req.query.since as string) || Date.now() - 300000; // ostatnie 5 min
+      const sinceDate = new Date(since);
+      const notifications: Array<{ title: string; body: string; tag: string; at: Date }> = [];
+
+      // Nowo wdrożone taski
+      try {
+        const applied = await query(
+          `SELECT id, title, type, source, updated_at FROM code_tasks
+           WHERE status = 'applied' AND updated_at > $1
+           ORDER BY updated_at DESC LIMIT 5`,
+          [sinceDate],
+        );
+        for (const t of applied) {
+          notifications.push({
+            title: `⚡ Wdrożono: ${t.title}`,
+            body: `${t.source} → ${t.type}`,
+            tag: `applied-${t.id}`,
+            at: t.updated_at,
+          });
+        }
+      } catch {}
+
+      // Nowe pomysły w review
+      try {
+        const review = await query(
+          `SELECT id, title, source, created_at FROM code_tasks
+           WHERE status = 'review' AND created_at > $1
+           ORDER BY created_at DESC LIMIT 3`,
+          [sinceDate],
+        );
+        for (const t of review) {
+          notifications.push({
+            title: `👁️ Nowy pomysł: ${t.title}`,
+            body: `Źródło: ${t.source}`,
+            tag: `review-${t.id}`,
+            at: t.created_at,
+          });
+        }
+      } catch {}
+
+      // Agent errors
+      const agents = agentNetwork.getAllAgents();
+      for (const agent of agents) {
+        if (agent.metrics.lastResult && !agent.metrics.lastResult.success && agent.metrics.lastRunAt) {
+          if (agent.metrics.lastRunAt.getTime() > since) {
+            notifications.push({
+              title: `❌ ${agent.name} ERROR`,
+              body: agent.metrics.lastResult.message.substring(0, 100),
+              tag: `error-${agent.name}`,
+              at: agent.metrics.lastRunAt,
+            });
+          }
+        }
+      }
+
+      // Nowi agenci zarejestrowani
+      const agentCount = agents.length;
+      if (agentCount > 14) {
+        notifications.push({
+          title: `🤖 Nowy agent w sieci!`,
+          body: `Sieć ma teraz ${agentCount} agentów`,
+          tag: `agents-${agentCount}`,
+          at: new Date(),
+        });
+      }
+
+      res.json({ notifications, count: notifications.length, since: sinceDate });
+    } catch (error) {
+      res.status(500).json({ notifications: [], error: 'Błąd' });
+    }
+  });
+
   // ─── PRICING API ───
 
   app.get('/api/pricing', (_req, res) => {
