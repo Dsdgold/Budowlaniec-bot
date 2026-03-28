@@ -441,6 +441,59 @@ function startServer(): http.Server {
     }
   });
 
+  // ─── CONTENT API ───
+
+  // Social media posts
+  app.get('/api/content/posts', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const posts = await query(
+        'SELECT * FROM social_posts ORDER BY created_at DESC LIMIT $1', [limit]
+      );
+      res.json(posts);
+    } catch { res.json([]); }
+  });
+
+  // Blog articles
+  app.get('/api/content/articles', async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 10;
+      const articles = await query(
+        'SELECT id, title, slug, excerpt, category, tags, views, created_at FROM blog_articles WHERE published = true ORDER BY created_at DESC LIMIT $1', [limit]
+      );
+      res.json(articles);
+    } catch { res.json([]); }
+  });
+
+  app.get('/api/content/articles/:slug', async (req, res) => {
+    try {
+      const articles = await query('SELECT * FROM blog_articles WHERE slug = $1', [req.params.slug]);
+      if (articles.length === 0) { res.status(404).json({ error: 'Nie znaleziono' }); return; }
+      await query('UPDATE blog_articles SET views = views + 1 WHERE slug = $1', [req.params.slug]);
+      res.json(articles[0]);
+    } catch { res.status(500).json({ error: 'Błąd' }); }
+  });
+
+  // Newsletter subscribe
+  app.post('/api/subscribe', async (req, res) => {
+    try {
+      const { email, name } = req.body;
+      if (!email) { res.status(400).json({ error: 'Brak email' }); return; }
+      await query(
+        'INSERT INTO email_subscribers (email, name) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING',
+        [email, name || null]
+      );
+      res.json({ success: true, message: 'Zapisano do newslettera!' });
+    } catch { res.status(500).json({ error: 'Błąd zapisu' }); }
+  });
+
+  app.get('/api/subscribers/count', async (_req, res) => {
+    try {
+      const r = await query('SELECT COUNT(*) as cnt FROM email_subscribers WHERE is_active = true');
+      res.json({ count: r[0]?.cnt || 0 });
+    } catch { res.json({ count: 0 }); }
+  });
+
   // ─── NOTIFICATIONS API (dla PWA Android) ───
 
   app.get('/api/notifications', async (req, res) => {
