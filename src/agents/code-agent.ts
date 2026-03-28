@@ -99,7 +99,7 @@ Wygeneruj kod TypeScript realizujący to zadanie.`;
     try {
       const message = await anthropic.messages.create({
         model: MODEL,
-        max_tokens: 2000,
+        max_tokens: 6000,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
       });

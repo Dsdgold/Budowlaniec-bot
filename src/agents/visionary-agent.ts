@@ -150,11 +150,14 @@ export class VisionaryAgent extends BaseAgent {
       '',
       'ZASADY: importuj TYLKO z ../core/agent, ../db/client, ../core/events, ../utils/logger, ../config.',
       'Kod MUSI byc poprawny TypeScript. Prawdziwa logika, nie placeholdery.',
+      'WAZNE: kazdy agent MAX 80 linii kodu. Krotki, zwiezly, dzialajacy.',
+      'NIE generuj dlugiego kodu. Lepiej prosty agent niz uciety w polowie.',
+      'KAZDY pomysl MUSI miec target_file np. src/agents/nazwa-agent.ts',
     ].join('\n');
 
     const message = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 3000,
+      max_tokens: 8000,
       system: systemPrompt,
       messages: [{
         role: 'user',
