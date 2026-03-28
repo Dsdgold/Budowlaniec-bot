@@ -164,23 +164,7 @@ INSPIRACJE na nowych agentów:
 - PaymentAgent: obsługuje płatności Stripe/BLIK za plany Pro/Business
 - LandingPageAgent: tworzy landing pages pod konkretne kampanie
 
-Dla type="new_agent", KOD MUSI zawierać KOMPLETNĄ klasę:
-\`\`\`typescript
-import { BaseAgent, AgentResult } from '../core/agent';
-import { query } from '../db/client';
-import { eventBus } from '../core/events';
-import logger from '../utils/logger';
-
-export class MojAgent extends BaseAgent {
-  constructor() {
-    super({ name: 'MojAgent', description: '...', icon: '🆕', cronSchedule: '0 */4 * * *', tags: ['profit'] });
-  }
-  protected async execute(): Promise<AgentResult> {
-    // PRAWDZIWA LOGIKA — nie placeholder
-    return { success: true, message: 'Done' };
-  }
-}
-\`\`\`
+Dla type="new_agent", KOD MUSI zawierać KOMPLETNĄ klasę (patrz przykład poniżej w promptzie).
 
 Format JSON — ZAWSZE 4 pomysły:
 [{"title":"...","description":"JAK TO ZARABIA PIENIĄDZE","priority":"high","type":"new_agent|feature|ui_change","code":"KOMPLETNY KOD","target_file":"src/agents/nazwa-agent.ts"}]
@@ -207,28 +191,32 @@ Dla KAŻDEGO pomysłu napisz:
 5. KOD — gotowy TypeScript/HTML
 6. target_file — np. "src/agents/moj-nowy-agent.ts" lub "public/dashboard.html"
 
-Gdy tworzysz type="new_agent", KOD MUSI zawierać kompletną klasę agenta:
-\`\`\`typescript
+Gdy tworzysz type="new_agent", KOD MUSI zawierać kompletną klasę agenta.
+Przykładowa struktura (TypeScript):
+
 import { BaseAgent, AgentResult } from '../core/agent';
-export class MojNowyAgent extends BaseAgent {
+import { query } from '../db/client';
+import { eventBus } from '../core/events';
+import logger from '../utils/logger';
+
+export class NazwaAgent extends BaseAgent {
   constructor() {
-    super({ name: 'MojNowyAgent', description: '...', icon: '🆕', cronSchedule: '...', tags: [...] });
+    super({ name: 'NazwaAgent', description: '...', icon: '🆕', cronSchedule: '0 */4 * * *', tags: ['profit'] });
   }
   protected async execute(): Promise<AgentResult> {
-    // logika
-    return { success: true, message: '...' };
+    // PRAWDZIWA logika agenta
+    return { success: true, message: 'Done', data: {} };
   }
 }
-\`\`\`
 
-Format JSON:
-[{"title":"...","description":"...","priority":"...","type":"...","code":"...","target_file":"..."}]
+Format JSON — ZAWSZE 4 pomysły:
+[{"title":"...","description":"JAK TO ZARABIA","priority":"high","type":"new_agent","code":"KOMPLETNY KOD","target_file":"src/agents/nazwa-agent.ts"}]
 
-Generuj 3-5 pomysłów. Kod KOMPLETNY, gotowy do wdrożenia.
-Priorytetyzuj: type="new_agent" > "feature" > "ui_change".
-KAŻDY pomysł musi odpowiadać na pytanie: "Jak to zarobi pieniądze?"
-Bądź ODWAŻNY — zmieniaj całą platformę jeśli trzeba. Nie bój się pivotów.
-Myśl jak startup founder z 30 dni runway — co zrobisz TERAZ żeby przeżyć?`,
+ZASADY KODU:
+- Importuj TYLKO z: ../core/agent, ../db/client, ../core/events, ../utils/logger, ../config
+- NIE importuj zewnętrznych bibliotek których nie ma w package.json
+- Agent MUSI mieć prawdziwą logikę, nie placeholdery
+- Kod MUSI być poprawny TypeScript`,
       messages: [{
         role: 'user',
         content: `Stan platformy:\n${context}\n\nWymyśl nowe pomysły biznesowe i wygeneruj kod.`,
