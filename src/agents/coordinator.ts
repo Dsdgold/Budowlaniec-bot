@@ -19,6 +19,8 @@ import { CodeAgent } from './code-agent';
 import { UIAgent } from './ui-agent';
 import { EvolutionAgent } from './evolution-agent';
 import { DoctorAgent } from './doctor-agent';
+import { VisionaryAgent } from './visionary-agent';
+import { ExecutorAgent } from './executor-agent';
 
 /**
  * Bezpieczna rejestracja — jeśli agent się wysypie, reszta działa
@@ -57,8 +59,12 @@ export function start(): void {
   safeRegister(() => new UIAgent());
   safeRegister(() => new EvolutionAgent());
 
-  // Doctor — naprawia innych agentów (rejestruj OSTATNIEGO)
+  // Doctor
   safeRegister(() => new DoctorAgent());
+
+  // WŁADCY — rejestruj OSTATNICH (mają kontrolę nad wszystkimi)
+  safeRegister(() => new VisionaryAgent());
+  safeRegister(() => new ExecutorAgent());
 
   // Uruchom CRON schedules
   agentNetwork.start();

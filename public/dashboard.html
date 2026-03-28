@@ -753,30 +753,32 @@ async function runAllAgents() {
 async function loadStats() {
   try {
     const res = await fetch('/api/stats');
+    if (!res.ok) { console.error('Stats API error:', res.status); return; }
     const d = await res.json();
+    console.log('Stats loaded:', d);
+
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val ?? '-'; };
 
     if (d.users) {
-      document.getElementById('sUsers').textContent = d.users.total || 0;
-      document.getElementById('sUsersSub').textContent =
-        `${d.users.pro || 0} PRO / ${d.users.active_today || 0} dzis`;
+      set('sUsers', d.users.total);
+      set('sUsersSub', `${d.users.pro || 0} PRO / ${d.users.active_today || 0} dzis`);
     }
     if (d.products) {
-      document.getElementById('sProducts').textContent = d.products.total || 0;
-      document.getElementById('sProductsSub').textContent = `${d.products.with_prices || 0} z cenami`;
-      document.getElementById('sPromos').textContent = d.products.promos || 0;
+      set('sProducts', d.products.total);
+      set('sProductsSub', `${d.products.with_prices || 0} z cenami`);
+      set('sPromos', d.products.promos);
     }
     if (d.news) {
-      document.getElementById('sNews').textContent = d.news.total || 0;
-      document.getElementById('sNewsSub').textContent =
-        `${d.news.today || 0} dzis / ${d.news.summarized || 0} AI`;
+      set('sNews', d.news.total);
+      set('sNewsSub', `${d.news.today || 0} dzis / ${d.news.summarized || 0} AI`);
     }
     if (d.leads) {
-      document.getElementById('sLeads').textContent = d.leads.total || 0;
-      document.getElementById('sLeadsSub').textContent = `${d.leads.today || 0} dzis / ${d.leads.new || 0} nowych`;
+      set('sLeads', d.leads.total);
+      set('sLeadsSub', `${d.leads.today || 0} dzis / ${d.leads.new || 0} nowych`);
     }
     if (d.insights) {
-      document.getElementById('sInsights').textContent = d.insights.total || 0;
-      document.getElementById('sInsightsSub').textContent = `${d.insights.today || 0} dzis`;
+      set('sInsights', d.insights.total);
+      set('sInsightsSub', `${d.insights.today || 0} dzis`);
     }
 
     document.getElementById('refreshTime').textContent = new Date().toLocaleTimeString('pl-PL');
