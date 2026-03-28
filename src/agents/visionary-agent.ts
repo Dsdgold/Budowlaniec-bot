@@ -142,18 +142,34 @@ Myśl KREATYWNIE. Nie ograniczaj się do tego co jest. Wymyślaj zupełnie nowe:
 - Nowe kanały (WhatsApp, email, app, widget)
 - Nowe produkty (kalkulator kosztów budowy, porównywarka wykonawców)
 - Integracje (CRM, ERP, księgowość)
+- NOWI AGENCI — twórz nowych agentów do nowych zadań!
 
 Dla KAŻDEGO pomysłu napisz:
 1. Tytuł (krótki, konkretny)
 2. Opis (co to robi i jak zarabia)
 3. Priorytet (critical/high/medium/low)
-4. Typ (feature/new_agent/ui_change/improvement/integration)
-5. KOD — gotowy TypeScript/HTML który to realizuje
+4. Typ: "new_agent" jeśli to nowy agent, "feature", "ui_change", "improvement", "integration"
+5. KOD — gotowy TypeScript/HTML
+6. target_file — np. "src/agents/moj-nowy-agent.ts" lub "public/dashboard.html"
 
-Format: JSON array pomysłów:
+Gdy tworzysz type="new_agent", KOD MUSI zawierać kompletną klasę agenta:
+\`\`\`typescript
+import { BaseAgent, AgentResult } from '../core/agent';
+export class MojNowyAgent extends BaseAgent {
+  constructor() {
+    super({ name: 'MojNowyAgent', description: '...', icon: '🆕', cronSchedule: '...', tags: [...] });
+  }
+  protected async execute(): Promise<AgentResult> {
+    // logika
+    return { success: true, message: '...' };
+  }
+}
+\`\`\`
+
+Format JSON:
 [{"title":"...","description":"...","priority":"...","type":"...","code":"...","target_file":"..."}]
 
-Generuj 2-4 pomysły. Kod musi być KOMPLETNY i gotowy do wdrożenia.`,
+Generuj 2-4 pomysły. Kod KOMPLETNY, gotowy do wdrożenia. Preferuj type="new_agent" — nowi agenci dają największą wartość.`,
       messages: [{
         role: 'user',
         content: `Stan platformy:\n${context}\n\nWymyśl nowe pomysły biznesowe i wygeneruj kod.`,

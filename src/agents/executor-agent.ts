@@ -210,6 +210,11 @@ Odpowiedz JSON: {"approved": true/false, "reason": "uzasadnienie"}`,
         return await this.deployUI(task, code);
       }
 
+      // Nowy agent — zapisz + zarejestruj w runtime
+      if (task.type === 'new_agent' && targetFile) {
+        return await this.deployNewAgent(task, code, targetFile);
+      }
+
       // Nowe pliki — zapisz
       if (targetFile && !targetFile.startsWith('generated/')) {
         return await this.deployFile(task, code, targetFile);
@@ -261,6 +266,59 @@ Odpowiedz JSON: {"approved": true/false, "reason": "uzasadnienie"}`,
     await query('UPDATE code_tasks SET status = $1, target_file = $2, updated_at = NOW() WHERE id = $3',
       ['applied', targetFile, task.id]);
     eventBus.log('success', this.name, `Deployed file: ${targetFile}`);
+    return true;
+  }
+
+  /** Deploy nowego agenta — zapisz plik + zarejestruj w runtime */
+  private async deployNewAgent(task: any, code: string, targetFile: string): Promise<boolean> {
+    const fullPath = path.join(__dirname, '..', '..', targetFile);
+
+    // Nie nadpisuj
+    if (fs.existsSync(fullPath)) {
+      eventBus.log('warn', this.name, `Agent plik istnieje: ${targetFile}`);
+      return false;
+    }
+
+    // Zapisz plik .ts (source)
+    fs.writeFileSync(fullPath, code);
+
+    // Spróbuj skompilować i zarejestrować w runtime
+    // Kompilacja TS→JS w runtime nie jest możliwa bez ts-node
+    // Ale możemy zapisać jako gotowy do następnego buildu
+    eventBus.log('success', this.name, `Nowy agent zapisany: ${targetFile} — aktywny po rebuildzie`);
+
+    // Utwórz prosty JS wrapper jeśli to możliwe
+    try {
+      const distFile = targetFile.replace('src/', 'dist/').replace('.ts', '.js');
+      const distPath = path.join(__dirname, '..', '..', distFile);
+      const distDir = path.dirname(distPath);
+      if (!fs.existsSync(distDir)) fs.mkdirSync(distDir, { recursive: true });
+
+      // Transpiluj minimalnie — zamień importy na require, usuń typy
+      let jsCode = code
+        .replace(/import\s+\{([^}]+)\}\s+from\s+'([^']+)'/g, 'const {$1} = require("$2")')
+        .replace(/import\s+(\w+)\s+from\s+'([^']+)'/g, 'const $1 = require("$2")')
+        .replace(/:\s*(string|number|boolean|any|void|Promise<[^>]+>|AgentResult|Record<[^>]+>)/g, '')
+        .replace(/export\s+/g, 'module.exports.')
+        .replace(/as\s+\w+/g, '')
+        .replace(/<[^>]+>/g, '');
+
+      fs.writeFileSync(distPath, jsCode);
+
+      // Zarejestruj w runtime
+      const className = code.match(/class\s+(\w+)/)?.[1];
+      if (className) {
+        const registered = await agentNetwork.registerDynamic(distPath, className);
+        if (registered) {
+          eventBus.log('success', this.name, `Agent ${className} AKTYWNY w runtime!`);
+        }
+      }
+    } catch (error) {
+      eventBus.log('warn', this.name, `Agent zapisany ale nie zarejestrowany w runtime: ${(error as Error).message}`);
+    }
+
+    await query('UPDATE code_tasks SET status = $1, target_file = $2, updated_at = NOW() WHERE id = $3',
+      ['applied', targetFile, task.id]);
     return true;
   }
 

@@ -93,6 +93,28 @@ class AgentNetwork {
     return this.agents.get(name);
   }
 
+  /** Zarejestruj dynamicznego agenta w runtime (z pliku JS) */
+  async registerDynamic(filePath: string, className: string): Promise<boolean> {
+    try {
+      const module = require(filePath);
+      const AgentClass = module[className];
+      if (!AgentClass) {
+        logger.error(`❌ [Network] Klasa ${className} nie znaleziona w ${filePath}`);
+        return false;
+      }
+      const agent = new AgentClass() as BaseAgent;
+      this.register(agent);
+      if (agent.cronSchedule) {
+        this.scheduleCron(agent);
+      }
+      eventBus.log('success', 'Network', `Dynamiczny agent zarejestrowany: ${agent.name}`);
+      return true;
+    } catch (error) {
+      logger.error(`❌ [Network] Błąd rejestracji dynamicznej:`, error);
+      return false;
+    }
+  }
+
   /** Pobierz wszystkich agentów */
   getAllAgents(): BaseAgent[] {
     return Array.from(this.agents.values());
@@ -125,7 +147,7 @@ class AgentNetwork {
   }
 
   /** Ustaw CRON dla agenta */
-  private scheduleCron(agent: BaseAgent): void {
+  scheduleCron(agent: BaseAgent): void {
     if (!agent.cronSchedule) return;
 
     const existing = this.cronJobs.get(agent.name);
