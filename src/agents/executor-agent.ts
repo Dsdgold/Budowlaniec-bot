@@ -214,18 +214,19 @@ Odpowiedz JSON: {"approved": true/false, "reason": "uzasadnienie"}`,
         if (targetMatch) {
           targetFile = targetMatch[1].trim();
         } else if (task.type === 'ui_change') {
-          targetFile = 'public/dashboard.html';
+          targetFile = 'public/client.html';
         } else if (task.type === 'new_agent') {
           const nameMatch = code.match(/class\s+(\w+Agent)/);
           targetFile = nameMatch
-            ? `src/agents/${nameMatch[1].replace(/([A-Z])/g, '-$1').toLowerCase().slice(1)}.ts`
+            ? 'src/agents/' + nameMatch[1].replace(/([A-Z])/g, '-$1').toLowerCase().slice(1) + '.ts'
             : null;
         }
       }
 
-      // UI changes — wstaw do dashboardu
-      if (targetFile === 'public/dashboard.html') {
-        return await this.deployUI(task, code);
+      // UI changes — wstaw do client.html LUB dashboard.html
+      if (task.type === 'ui_change' || targetFile === 'public/client.html' || targetFile === 'public/dashboard.html') {
+        const htmlFile = (targetFile && targetFile.includes('dashboard')) ? 'dashboard.html' : 'client.html';
+        return await this.deployUI(task, code, htmlFile);
       }
 
       // Nowy agent — zapisz + zarejestruj w runtime
@@ -248,13 +249,23 @@ Odpowiedz JSON: {"approved": true/false, "reason": "uzasadnienie"}`,
     }
   }
 
-  /** Deploy UI change */
-  private async deployUI(task: any, code: string): Promise<boolean> {
-    const dashPath = path.join(__dirname, '..', '..', 'public', 'dashboard.html');
-    if (!fs.existsSync(dashPath)) return false;
+  /** Deploy UI change do client.html lub dashboard.html */
+  private async deployUI(task: any, code: string, htmlFile: string = 'client.html'): Promise<boolean> {
+    const htmlPath = path.join(__dirname, '..', '..', 'public', htmlFile);
+    if (!fs.existsSync(htmlPath)) {
+      // Spróbuj alternatywną ścieżkę
+      const altPath = path.join(__dirname, '..', 'public', htmlFile);
+      if (!fs.existsSync(altPath)) {
+        eventBus.log('warn', this.name, 'Brak pliku: ' + htmlFile);
+        return false;
+      }
+    }
+    const dashPath = fs.existsSync(path.join(__dirname, '..', '..', 'public', htmlFile))
+      ? path.join(__dirname, '..', '..', 'public', htmlFile)
+      : path.join(__dirname, '..', 'public', htmlFile);
 
     const backup = fs.readFileSync(dashPath, 'utf-8');
-    fs.writeFileSync(dashPath + `.bak.${task.id}`, backup);
+    fs.writeFileSync(dashPath + '.bak.' + task.id, backup);
 
     const newHtml = backup.replace(
       '</body>',
