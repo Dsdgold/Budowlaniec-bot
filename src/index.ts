@@ -673,7 +673,12 @@ function startServer(): http.Server {
   });
 
   app.get('/', (_req, res) => {
-    res.redirect('/dashboard');
+    const clientPath = path.join(__dirname, '..', 'public', 'client.html');
+    if (fs.existsSync(clientPath)) {
+      res.sendFile(clientPath);
+    } else {
+      res.redirect('/dashboard');
+    }
   });
 
   // ─── START HTTP + WEBSOCKET ───
