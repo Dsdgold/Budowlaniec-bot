@@ -21,7 +21,7 @@ import path from 'path';
 import logger from '../utils/logger';
 
 const anthropic = new Anthropic({ apiKey: config.ANTHROPIC_API_KEY });
-const MODEL = 'claude-haiku-4-5-20251001';
+const MODEL = 'claude-opus-4-6';
 
 export class EvolutionAgent extends BaseAgent {
   constructor() {

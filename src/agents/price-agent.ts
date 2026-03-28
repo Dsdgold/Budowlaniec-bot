@@ -7,6 +7,7 @@ import { CastoramaScraper } from '../scrapers/castorama';
 import { LeroyScraper } from '../scrapers/leroy';
 import { TrzywScraper } from '../scrapers/trzyw';
 import { BechcickiScraper } from '../scrapers/bechcicki';
+import { CeneoScraper } from '../scrapers/ceneo';
 import { bulkUpsertPrices } from '../db/prices';
 import { checkAndSendPriceAlerts } from '../reports/daily-prices';
 import { CRON_SCHEDULES } from '../config';
@@ -18,7 +19,7 @@ export class PriceAgent extends BaseAgent {
   constructor() {
     super({
       name: 'PriceAgent',
-      description: 'Scrapuje ceny materiałów budowlanych z 4 sklepów',
+      description: 'Scrapuje ceny materiałów budowlanych z 5 sklepów + Ceneo',
       icon: '📊',
       cronSchedule: CRON_SCHEDULES.PRICE_SCRAPE,
       tags: ['scraping', 'prices', 'core'],
@@ -33,6 +34,7 @@ export class PriceAgent extends BaseAgent {
     this.isScraping = true;
 
     const scrapers = [
+      new CeneoScraper(),
       new CastoramaScraper(),
       new LeroyScraper(),
       new TrzywScraper(),
@@ -41,15 +43,21 @@ export class PriceAgent extends BaseAgent {
 
     let totalProducts = 0;
     let errors = 0;
+    const scraperResults: string[] = [];
 
     for (const scraper of scrapers) {
       try {
         const products = await scraper.scrape();
         const saved = await bulkUpsertPrices(products);
         totalProducts += saved;
+        scraperResults.push(`${scraper.constructor.name}: ${saved} produktow`);
       } catch (error) {
         errors++;
-        logger.error(`❌ [PriceAgent] Błąd scrapera: ${(error as Error).message}`);
+        const scraperName = scraper.constructor.name;
+        const errorMessage = (error as Error).message;
+        logger.error(`[PriceAgent] Blad scrapera ${scraperName}: ${errorMessage}`);
+        scraperResults.push(`${scraperName}: BLAD - ${errorMessage}`);
+        // Kontynuuj z nastepnym scraperem
       }
 
       await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -61,13 +69,13 @@ export class PriceAgent extends BaseAgent {
     try {
       await checkAndSendPriceAlerts();
     } catch (error) {
-      logger.error('❌ [PriceAgent] Błąd sprawdzania alertów:', error);
+      logger.error('[PriceAgent] Blad sprawdzania alertow:', error);
     }
 
     return {
-      success: errors === 0,
-      message: `Scraping: ${totalProducts} produktów, ${errors} błędów`,
-      data: { totalProducts, errors, scrapers: scrapers.length },
+      success: errors < scrapers.length, // Sukces jesli chociaz jeden scraper zadzialal
+      message: `Scraping: ${totalProducts} produktow, ${errors} bledow z ${scrapers.length} scraperow`,
+      data: { totalProducts, errors, scrapers: scrapers.length, details: scraperResults },
     };
   }
 

@@ -102,7 +102,73 @@ export const SELLERS = {
   leroy: { name: 'Leroy Merlin', baseUrl: 'https://www.leroymerlin.pl' },
   trzyw: { name: '3W', baseUrl: 'https://3wdb.pl' },
   bechcicki: { name: 'Bechcicki', baseUrl: 'https://www.bechcicki.pl' },
+  ceneo: { name: 'Ceneo', baseUrl: 'https://www.ceneo.pl' },
 } as const;
+
+/** Plany monetyzacji */
+export const PRICING_PLANS = {
+  free: {
+    name: 'Free',
+    price: 0,
+    features: [
+      'Podstawowe ceny (odświeżane co 24h)',
+      'Top 3 kategorie',
+      '5 pytań AI/dzień',
+      'Raport poranny',
+    ],
+    limits: {
+      categories: 3,
+      aiQueries: 5,
+      alerts: 2,
+      reportsPerDay: 1,
+      historyDays: 7,
+    },
+  },
+  pro: {
+    name: 'Pro',
+    price: 49,
+    features: [
+      'Wszystkie kategorie',
+      'Ceny w czasie rzeczywistym',
+      '20 pytań AI/dzień',
+      'Raporty poranny + wieczorny',
+      'Alerty cenowe (10)',
+      'Historia 30 dni',
+      'Porównania cen',
+    ],
+    limits: {
+      categories: 10,
+      aiQueries: 20,
+      alerts: 10,
+      reportsPerDay: 2,
+      historyDays: 30,
+    },
+  },
+  business: {
+    name: 'Business',
+    price: 199,
+    features: [
+      'Wszystko z Pro',
+      'API dostęp',
+      'Eksport CSV/Excel',
+      'Leady budowlane',
+      'Analytics & Insights',
+      'Nielimitowane alerty',
+      'Historia 365 dni',
+      'Priorytetowe wsparcie',
+      'Własne scrapery',
+    ],
+    limits: {
+      categories: 10,
+      aiQueries: 100,
+      alerts: -1,
+      reportsPerDay: -1,
+      historyDays: 365,
+    },
+  },
+} as const;
+
+export type PlanType = keyof typeof PRICING_PLANS;
 
 /** Harmonogram CRON */
 export const CRON_SCHEDULES = {

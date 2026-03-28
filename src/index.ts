@@ -441,6 +441,20 @@ function startServer(): http.Server {
     }
   });
 
+  // ─── PRICING API ───
+
+  app.get('/api/pricing', (_req, res) => {
+    const { PRICING_PLANS } = require('./config');
+    res.json(PRICING_PLANS);
+  });
+
+  app.get('/api/pricing/:plan', (req, res) => {
+    const { PRICING_PLANS } = require('./config');
+    const plan = PRICING_PLANS[req.params.plan as keyof typeof PRICING_PLANS];
+    if (!plan) { res.status(404).json({ error: 'Plan nie istnieje' }); return; }
+    res.json(plan);
+  });
+
   // ─── EVOLUTION API ───
 
   // Lista task queue

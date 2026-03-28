@@ -346,6 +346,109 @@
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
     ::-webkit-scrollbar-thumb:hover { background: var(--border-bright); }
 
+    /* ─── PRICING ─── */
+    .plan-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+      transition: all 0.3s;
+      position: relative;
+    }
+
+    .plan-card:hover {
+      border-color: var(--accent-blue);
+      transform: translateY(-4px);
+      box-shadow: 0 8px 30px rgba(96, 165, 250, 0.15);
+    }
+
+    .plan-card.featured {
+      border-color: var(--accent-purple);
+      background: linear-gradient(135deg, rgba(167,139,250,0.08), rgba(96,165,250,0.05));
+    }
+
+    .plan-card.featured::before {
+      content: 'POPULAR';
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+      color: white;
+      font-size: 0.6rem;
+      font-weight: 700;
+      padding: 0.2rem 0.8rem;
+      border-radius: 999px;
+      letter-spacing: 1px;
+    }
+
+    .plan-name {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 0.3rem;
+    }
+
+    .plan-price {
+      font-size: 2rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .plan-price span { font-size: 0.9rem; }
+
+    .plan-period {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-bottom: 1rem;
+    }
+
+    .plan-features {
+      list-style: none;
+      text-align: left;
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+
+    .plan-features li {
+      padding: 0.3rem 0;
+      border-bottom: 1px solid rgba(42,48,80,0.2);
+    }
+
+    .plan-features li::before {
+      content: '✓ ';
+      color: var(--accent-green);
+      font-weight: 700;
+    }
+
+    .plan-btn {
+      width: 100%;
+      padding: 0.6rem;
+      border-radius: 8px;
+      border: 1px solid var(--accent-blue);
+      background: transparent;
+      color: var(--accent-blue);
+      font-weight: 600;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .plan-btn:hover {
+      background: var(--accent-blue);
+      color: var(--bg-primary);
+    }
+
+    .plan-card.featured .plan-btn {
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue));
+      border: none;
+      color: white;
+    }
+
     /* ─── RESPONSIVE ─── */
     @media (max-width: 768px) {
       .header { padding: 1rem; flex-wrap: wrap; gap: 0.5rem; }
@@ -445,6 +548,17 @@
         <div class="card-body">
           <div class="chart-wrap">
             <canvas id="priceChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- PRICING -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">💎 Plany cenowe</div>
+        </div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem" id="pricingGrid">
           </div>
         </div>
       </div>
@@ -769,6 +883,33 @@ function timeAgo(date) {
   return `${Math.floor(s/86400)}d temu`;
 }
 
+// ─── PRICING ───
+async function loadPricing() {
+  try {
+    const res = await fetch('/api/pricing');
+    const plans = await res.json();
+    const grid = document.getElementById('pricingGrid');
+    if (!grid) return;
+
+    const planKeys = Object.keys(plans);
+    grid.innerHTML = planKeys.map((key, i) => {
+      const p = plans[key];
+      const featured = i === 1 ? 'featured' : '';
+      const priceText = p.price === 0 ? 'Darmowy' : `${p.price} <span>zl/mies</span>`;
+      const features = p.features.map(f => `<li>${f}</li>`).join('');
+      const btnText = p.price === 0 ? 'Aktualny plan' : 'Wybierz plan';
+
+      return `<div class="plan-card ${featured}">
+        <div class="plan-name">${p.name}</div>
+        <div class="plan-price">${priceText}</div>
+        <div class="plan-period">${p.price > 0 ? 'miesiecznie' : 'na zawsze'}</div>
+        <ul class="plan-features">${features}</ul>
+        <button class="plan-btn">${btnText}</button>
+      </div>`;
+    }).join('');
+  } catch {}
+}
+
 // ─── EVOLUTION ───
 async function loadEvolution() {
   try {
@@ -845,6 +986,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAgents();
   loadChart();
   loadEvolution();
+  loadPricing();
 
   // Auto-refresh co 30s
   setInterval(() => {

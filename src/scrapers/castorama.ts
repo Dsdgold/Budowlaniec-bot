@@ -1,6 +1,7 @@
 /**
  * Scraper dla Castorama.pl
  * Pobiera ceny materiałów budowlanych ze strony Castorama
+ * Używa HTTP fetch zamiast Puppeteer dla większej niezawodności
  */
 import { Page } from 'puppeteer';
 import { BaseScraper } from './base';
@@ -8,66 +9,47 @@ import { ScrapedProduct } from '../db/prices';
 import { Kategoria, SELLERS } from '../config';
 import logger from '../utils/logger';
 
-/** Mapowanie kategorii na URL-e Castorama */
-const CATEGORY_URLS: Partial<Record<Kategoria, string[]>> = {
-  cement: [
-    '/c/budowa/cementy-zaprawy-i-mieszanki/cementy.html',
-    '/c/budowa/cementy-zaprawy-i-mieszanki/zaprawy.html',
-  ],
-  stal: [
-    '/c/budowa/profile-i-ksztaltowniki-stalowe.html',
-  ],
-  drewno: [
-    '/c/budowa/drewno-budowlane.html',
-    '/c/budowa/deski-i-listwy.html',
-  ],
-  izolacja: [
-    '/c/budowa/izolacje-termiczne.html',
-    '/c/budowa/styropian.html',
-  ],
-  ceramika: [
-    '/c/lazienka/plytki-lazienkowe.html',
-    '/c/kuchnia/plytki-kuchenne.html',
-  ],
-  'chemia-budowlana': [
-    '/c/budowa/chemia-budowlana.html',
-  ],
-  dachy: [
-    '/c/budowa/pokrycia-dachowe.html',
-  ],
-  'okna-drzwi': [
-    '/c/okna-i-drzwi.html',
-  ],
-  narzedzia: [
-    '/c/narzedzia.html',
-  ],
+/** Mapowanie kategorii na słowa kluczowe wyszukiwania */
+const CATEGORY_KEYWORDS: Partial<Record<Kategoria, string[]>> = {
+  cement: ['cement portlandzki', 'zaprawa murarska', 'beton gotowy'],
+  stal: ['profil stalowy', 'kątownik stalowy', 'pręt zbrojeniowy'],
+  drewno: ['deska budowlana', 'belka drewniana', 'łata dachowa'],
+  izolacja: ['styropian', 'wełna mineralna', 'pianka izolacyjna'],
+  ceramika: ['płytki ceramiczne', 'gres', 'terakota'],
+  'chemia-budowlana': ['klej do płytek', 'fuga', 'silikon budowlany'],
+  dachy: ['blachodachówka', 'papa', 'gont bitumiczny'],
+  'okna-drzwi': ['okno PCV', 'drzwi wewnętrzne'],
+  narzedzia: ['wiertarka', 'szlifierka kątowa', 'piła'],
 };
 
 export class CastoramaScraper extends BaseScraper {
   constructor() {
-    super('Castorama', SELLERS.castorama.baseUrl);
+    super('Castorama', SELLERS.castorama.baseUrl, { maxRetries: 1 });
   }
 
   /**
-   * Scrapuj produkty z Castorama.pl
+   * Scrapuj produkty z Castorama.pl przez wyszukiwarkę
    */
   async scrapeProducts(page: Page): Promise<ScrapedProduct[]> {
     const allProducts: ScrapedProduct[] = [];
 
-    for (const [category, urls] of Object.entries(CATEGORY_URLS)) {
-      for (const url of urls) {
+    for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+      for (const keyword of keywords) {
         try {
-          const products = await this.scrapeCategory(
+          const products = await this.searchProducts(
             page,
             category as Kategoria,
-            url
+            keyword
           );
           allProducts.push(...products);
         } catch (error) {
           logger.error(
-            `❌ [Castorama] Błąd scrapingu kategorii ${category}: ${(error as Error).message}`
+            `[Castorama] Blad wyszukiwania "${keyword}" w ${category}: ${(error as Error).message}`
           );
         }
+
+        // Krótka pauza między zapytaniami
+        await this.sleep(2000);
       }
     }
 
@@ -75,33 +57,31 @@ export class CastoramaScraper extends BaseScraper {
   }
 
   /**
-   * Scrapuj jedną kategorię
+   * Wyszukaj produkty po słowie kluczowym
    */
-  private async scrapeCategory(
+  private async searchProducts(
     page: Page,
     category: Kategoria,
-    urlPath: string
+    keyword: string
   ): Promise<ScrapedProduct[]> {
-    const fullUrl = `${this.baseUrl}${urlPath}`;
-    logger.info(`🔍 [Castorama] Scrapuję: ${fullUrl}`);
+    const searchUrl = `${this.baseUrl}/search?term=${encodeURIComponent(keyword)}`;
+    logger.info(`[Castorama] Szukam: ${keyword} -> ${searchUrl}`);
 
-    await page.goto(fullUrl, { waitUntil: 'networkidle2' });
+    await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 20_000 });
 
     // Zamknij popup cookies
     await this.closeCookiePopup(page);
 
-    // Poczekaj na załadowanie produktów
-    await page.waitForSelector('[data-testid="product-card"], .product-card, .product-tile', {
-      timeout: 10_000,
-    }).catch(() => {
-      logger.warn(`⚠️ [Castorama] Brak produktów na: ${urlPath}`);
+    // Poczekaj na załadowanie produktów - próbujemy kilka selektorów
+    await page.waitForSelector(
+      '.product-card, [data-product-id], .c-product, [data-testid="product-card"]',
+      { timeout: 10_000 }
+    ).catch(() => {
+      logger.warn(`[Castorama] Brak wynikow dla: ${keyword}`);
     });
 
-    // Przewiń stronę (lazy loading)
-    await this.scrollPage(page, 3);
-
     // Wyciągnij dane produktów
-    const products = await page.evaluate(() => {
+    const products = await page.evaluate((baseUrl: string) => {
       const items: Array<{
         name: string;
         price: string;
@@ -111,36 +91,44 @@ export class CastoramaScraper extends BaseScraper {
         id: string;
       }> = [];
 
-      // Selektory produktów Castorama
+      // Selektory produktów Castorama - kilka wariantów
       const cards = document.querySelectorAll(
-        '[data-testid="product-card"], .product-card, .product-tile, [class*="ProductCard"]'
+        '.product-card, [data-product-id], .c-product, [data-testid="product-card"], [class*="ProductCard"]'
       );
 
       cards.forEach((card) => {
-        const nameEl =
-          card.querySelector('[data-testid="product-title"], .product-name, h2, h3') as HTMLElement;
-        const priceEl =
-          card.querySelector('[data-testid="product-price"], .product-price, [class*="price"]') as HTMLElement;
-        const originalPriceEl =
-          card.querySelector('[data-testid="original-price"], .original-price, [class*="crossed"]') as HTMLElement;
+        const nameEl = (
+          card.querySelector('.product-card__title, .product-name, [data-testid="product-title"], h2 a, h3 a') as HTMLElement
+        );
+        const priceEl = (
+          card.querySelector('.product-price__value, [data-price], [data-testid="product-price"], [class*="price"] .value') as HTMLElement
+        );
+        const originalPriceEl = (
+          card.querySelector('.product-price__old, .original-price, [class*="crossed"], [data-testid="original-price"]') as HTMLElement
+        );
         const linkEl = card.querySelector('a[href]') as HTMLAnchorElement;
-        const unitEl =
-          card.querySelector('[data-testid="product-unit"], .product-unit, [class*="unit"]') as HTMLElement;
+        const unitEl = (
+          card.querySelector('.product-price__unit, .product-unit, [class*="unit"]') as HTMLElement
+        );
 
         if (nameEl && priceEl) {
+          const href = linkEl?.href || '';
+          const fullUrl = href.startsWith('http') ? href : `${baseUrl}${href}`;
           items.push({
             name: nameEl.textContent?.trim() || '',
             price: priceEl.textContent?.trim() || '',
             originalPrice: originalPriceEl?.textContent?.trim() || '',
-            url: linkEl?.href || '',
+            url: fullUrl,
             unit: unitEl?.textContent?.trim() || 'szt.',
-            id: card.getAttribute('data-product-id') || linkEl?.href?.split('/').pop() || '',
+            id: card.getAttribute('data-product-id') || card.getAttribute('data-sku') || '',
           });
         }
       });
 
       return items;
-    });
+    }, this.baseUrl);
+
+    logger.info(`[Castorama] Znaleziono ${products.length} produktow dla "${keyword}"`);
 
     // Parsowanie wyników
     return products
@@ -153,7 +141,7 @@ export class CastoramaScraper extends BaseScraper {
         return {
           sellerSlug: 'castorama',
           categorySlug: category,
-          externalId: item.id || `casto-${item.name.substring(0, 50)}`,
+          externalId: item.id || `casto-${item.name.substring(0, 50).replace(/\s+/g, '-')}`,
           name: item.name,
           price,
           originalPrice: originalPrice || undefined,
