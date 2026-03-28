@@ -251,25 +251,34 @@ Odpowiedz JSON: {"approved": true/false, "reason": "uzasadnienie"}`,
 
   /** Deploy UI change do client.html lub dashboard.html */
   private async deployUI(task: any, code: string, htmlFile: string = 'client.html'): Promise<boolean> {
-    const htmlPath = path.join(__dirname, '..', '..', 'public', htmlFile);
-    if (!fs.existsSync(htmlPath)) {
-      // Spróbuj alternatywną ścieżkę
-      const altPath = path.join(__dirname, '..', 'public', htmlFile);
-      if (!fs.existsSync(altPath)) {
-        eventBus.log('warn', this.name, 'Brak pliku: ' + htmlFile);
-        return false;
-      }
+    // Szukaj pliku w kilku lokalizacjach
+    const candidates = [
+      path.join(__dirname, '..', '..', 'public', htmlFile),  // /app/public/ (volume mount)
+      path.join(__dirname, '..', 'public', htmlFile),         // /app/dist/public/
+      '/app/public/' + htmlFile,                               // absolutna sciezka
+    ];
+
+    let dashPath = '';
+    for (const p of candidates) {
+      if (fs.existsSync(p)) { dashPath = p; break; }
     }
-    const dashPath = fs.existsSync(path.join(__dirname, '..', '..', 'public', htmlFile))
-      ? path.join(__dirname, '..', '..', 'public', htmlFile)
-      : path.join(__dirname, '..', 'public', htmlFile);
+
+    if (!dashPath) {
+      eventBus.log('warn', this.name, 'Brak pliku ' + htmlFile + ' - szukano: ' + candidates.join(', '));
+      return false;
+    }
 
     const backup = fs.readFileSync(dashPath, 'utf-8');
     fs.writeFileSync(dashPath + '.bak.' + task.id, backup);
 
+    // Wstaw przed </body> lub przed <!-- AUTO-GENERATED
+    let insertPoint = '</body>';
+    if (backup.includes('<!-- AUTO-GENERATED')) {
+      insertPoint = '<!-- AUTO-GENERATED';
+    }
     const newHtml = backup.replace(
-      '</body>',
-      `\n<!-- EXECUTOR #${task.id}: ${task.title} -->\n${code}\n<!-- /EXECUTOR -->\n</body>`,
+      insertPoint,
+      `\n<!-- EXECUTOR #${task.id}: ${task.title} -->\n${code}\n<!-- /EXECUTOR #${task.id} -->\n${insertPoint}`,
     );
     fs.writeFileSync(dashPath, newHtml);
 
