@@ -21,6 +21,7 @@ import { EvolutionAgent } from './evolution-agent';
 import { DoctorAgent } from './doctor-agent';
 import { VisionaryAgent } from './visionary-agent';
 import { ExecutorAgent } from './executor-agent';
+import { WatchdogAgent } from './watchdog-agent';
 
 /**
  * Bezpieczna rejestracja — jeśli agent się wysypie, reszta działa
@@ -62,9 +63,12 @@ export function start(): void {
   // Doctor
   safeRegister(() => new DoctorAgent());
 
-  // WŁADCY — rejestruj OSTATNICH (mają kontrolę nad wszystkimi)
+  // WŁADCY
   safeRegister(() => new VisionaryAgent());
   safeRegister(() => new ExecutorAgent());
+
+  // WATCHDOG — pilnuje ze system ZAWSZE pracuje (rejestruj OSTATNIEGO)
+  safeRegister(() => new WatchdogAgent());
 
   // Uruchom CRON schedules
   agentNetwork.start();
