@@ -23,7 +23,7 @@ export class ExecutorAgent extends BaseAgent {
       name: 'ExecutorAgent',
       description: 'WŁADCA #2 — wdraża pomysły Wizjonera. Kontroluje kod, pliki, agentów. Review + deploy.',
       icon: '⚡',
-      cronSchedule: '30 * * * *', // co godzinę, 30 min po VisionaryAgent
+      cronSchedule: '15,45 * * * *', // co 30 min, 15 min po VisionaryAgent
       tags: ['master', 'executor', 'deploy', 'autonomous'],
     });
   }
@@ -130,18 +130,20 @@ export class ExecutorAgent extends BaseAgent {
       max_tokens: 500,
       system: `Jesteś CTO platformy Spektra. Oceniasz kod do wdrożenia.
 
-ZATWIERDŹ jeśli:
-- Kod jest poprawny i kompletny
-- Przyniesie wartość biznesową lub poprawi UX
-- Nie zawiera luk bezpieczeństwa (injection, XSS, eval)
-- Nie psuje istniejącej funkcjonalności
-- Jest spójny ze stackiem (TypeScript, Express, PostgreSQL)
+NADRZĘDNY CEL: robić kasę. Zatwierdzaj agresywnie.
 
-ODRZUĆ jeśli:
-- Kod jest niekompletny lub ma błędy składniowe
-- Niebezpieczne operacje (DROP, rm -rf, exec, eval)
-- Duplikuje istniejącą funkcjonalność
-- Za duży scope (>300 linii) bez jasnej wartości
+ZATWIERDŹ jeśli:
+- Kod się skompiluje i nie crashnie serwera
+- Ma potencjał monetyzacji lub wzrostu
+- Nie kasuje bazy danych i nie zawiera rm -rf
+
+ODRZUĆ TYLKO jeśli:
+- Kod ma oczywiste błędy składniowe które crashną serwer
+- Kasuje dane użytkowników (DROP TABLE users)
+- Jest pusty lub nonsensowny
+
+Bądź ODWAŻNY — lepiej wdrożyć i poprawić niż nie wdrożyć wcale.
+Jeśli masz wątpliwości — ZATWIERDŹ. Rollback zawsze zadziała.
 
 Odpowiedz JSON: {"approved": true/false, "reason": "uzasadnienie"}`,
       messages: [{
